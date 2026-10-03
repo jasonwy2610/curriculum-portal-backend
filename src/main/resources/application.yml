@@ -2,8 +2,10 @@ server:
   port: 8080
 
 spring:
+  # Cấu hình Driver kết nối MongoDB cấp hệ thống
   mongodb:
-    uri: mongodb://localhost:27017/training_program_db
+    uri: mongodb+srv://portal_admin:Huflit2026Secure@cluster0.uqbqgiy.mongodb.net/training_program_db?appName=Cluster0
+  # Cấu hình hành vi tầng Spring Data Repositories
   data:
     mongodb:
       auto-index-creation: false
