@@ -11,6 +11,10 @@ import java.util.List;
 @Repository
 public interface AcademicRecordRepository extends MongoRepository<AcademicRecord, ObjectId> {
     List<AcademicRecord> findByStudentId(ObjectId studentId);
-    Optional<AcademicRecord> findByStudentIdAndCourseCode(ObjectId studentId, String courseCode);
+    Optional<AcademicRecord> findByStudentIdAndCourseCodeAndCurriculumId(
+            ObjectId studentId,
+            String courseCode,
+            ObjectId curriculumId
+    );
     List<AcademicRecord> findByStudentIdAndCurriculumId(ObjectId studentId, ObjectId curriculumId);
 }

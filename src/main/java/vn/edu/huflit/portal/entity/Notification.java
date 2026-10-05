@@ -26,6 +26,7 @@ public class Notification {
     private String message;
     private ObjectId curriculumId;
     private String courseCode;
+    private ObjectId replacementRuleId;
 
     private List<ObjectId> recipientIds; // Danh sách ID sinh viên nhận thông báo
     private List<ObjectId> readBy;       // Danh sách ID sinh viên đã đọc

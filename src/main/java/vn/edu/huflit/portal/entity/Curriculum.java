@@ -31,11 +31,11 @@ public class Curriculum {
     private String cohort;
     private Integer appliedYear;
     private Integer totalCredits;
-    private String status; // "ACTIVE" | "ARCHIVED"
+    private String status; // "ACTIVE" | "ARCHIVED" | "DRAFT"
     private Integer version;
     private ObjectId clonedFrom; // Phục vụ F07 (Clone CTĐT)
 
-    private String specializationTrack; // "FROM_START" | "LATER"
+    private String specializationTrack; // "EARLY" | "LATER"
     private Integer specializationDecisionSemester;
 
     private List<SpecializationItem> specializations;

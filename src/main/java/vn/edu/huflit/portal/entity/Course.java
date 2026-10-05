@@ -31,7 +31,7 @@ public class Course {
     private Integer practiceHours;
     private String description;
     private String department;
-    private String status; // "ACTIVE" | "INACTIVE"
+    private String status; // "ACTIVE" | "INACTIVE" | "ARCHIVED"
 
     @CreatedDate
     private Date createdAt;
