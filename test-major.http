@@ -1,0 +1,114 @@
+### ====================================================================
+### TEST SUITE: F15 - QUẢN LÝ NGÀNH ĐÀO TẠO (MAJOR MANAGEMENT CRUD)
+### Base URL: http://localhost:8080/api/v1
+### ====================================================================
+
+### 1. Đăng nhập Admin lấy JWT Token
+# @name loginAdmin
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@huflit.edu.vn",
+  "password": "123456"
+}
+
+### Biến lưu token trích xuất từ phản hồi đăng nhập
+@authToken = {{loginAdmin.response.body.data.token}}
+
+### ====================================================================
+### 2. TẠO NGÀNH ĐÀO TẠO MỚI (HAPPY PATH - POST /api/v1/admin/majors)
+### ====================================================================
+# @name createMajor
+POST http://localhost:8080/api/v1/admin/majors
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "code": "7480101",
+  "name": "Khoa học máy tính",
+  "description": "Chương trình đào tạo Cử nhân Khoa học máy tính chuẩn HUFLIT",
+  "status": "ACTIVE"
+}
+
+### Biến lưu ID ngành vừa tạo để sử dụng cho các bước tiếp theo
+@createdMajorId = {{createMajor.response.body.data.id}}
+
+### ====================================================================
+### 3. NEGATIVE TEST 1: THỬ TẠO TRÙNG MÃ NGÀNH (DUPLICATE CODE)
+### Kì vọng: 400 Bad Request kèm thông báo "Mã ngành '7480101' đã tồn tại trong hệ thống"
+### ====================================================================
+POST http://localhost:8080/api/v1/admin/majors
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "code": "7480101",
+  "name": "Khoa học máy tính trùng lặp",
+  "description": "Thử nghiệm tạo trùng mã",
+  "status": "ACTIVE"
+}
+
+### ====================================================================
+### 4. NEGATIVE TEST 2: VALIDATION ĐẦU VÀO TRỐNG DỮ LIỆU BẮT BUỘC
+### Kì vọng: 400 Bad Request kèm thông báo validation
+### ====================================================================
+POST http://localhost:8080/api/v1/admin/majors
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "code": "",
+  "name": "",
+  "description": "Thiếu cả code và name"
+}
+
+### ====================================================================
+### 5. TRUY VẤN: LẤY TẤT CẢ NGÀNH ĐÀO TẠO
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/majors
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 6. TRUY VẤN: TÌM KIẾM THEO TỪ KHÓA & TRẠNG THÁI
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/majors?keyword=Khoa+học&status=ACTIVE
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 7. TRUY VẤN: LẤY CHI TIẾT NGÀNH THEO ID
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 8. TRUY VẤN: LẤY CHI TIẾT NGÀNH THEO MÃ NGÀNH (CODE)
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/majors/code/7480101
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 9. CẬP NHẬT THÔNG TIN NGÀNH (PUT /api/v1/admin/majors/{id})
+### ====================================================================
+PUT http://localhost:8080/api/v1/admin/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Khoa học máy tính & Trí tuệ nhân tạo",
+  "description": "Cập nhật định hướng chuyên sâu AI và Khoa học dữ liệu",
+  "status": "ACTIVE"
+}
+
+### ====================================================================
+### 10. XÓA MỀM NGÀNH ĐÀO TẠO (SOFT DELETE - DELETE /api/v1/admin/majors/{id})
+### Kì vọng: Trạng thái đổi thành "INACTIVE", tài liệu không bị xóa khỏi MongoDB
+### ====================================================================
+DELETE http://localhost:8080/api/v1/admin/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 11. XÁC NHẬN LẠI TRẠNG THÁI SAU KHI XÓA MỀM (STATUS = INACTIVE)
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
