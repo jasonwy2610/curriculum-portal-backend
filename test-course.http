@@ -1,0 +1,168 @@
+### ====================================================================
+### TEST SUITE: F18, F19, F20 - QUẢN LÝ DANH MỤC HỌC PHẦN (COURSE CATALOG)
+### Base URL: http://localhost:8080/api/v1
+### ====================================================================
+
+### 1. Đăng nhập Admin lấy JWT Token
+# @name loginAdmin
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@huflit.edu.vn",
+  "password": "123456"
+}
+
+### Biến lưu token từ phản hồi đăng nhập
+@authToken = {{loginAdmin.response.body.data.token}}
+
+### ====================================================================
+### 2. F18: TẠO HỌC PHẦN MỚI (HAPPY PATH - POST /api/v1/admin/courses)
+### Kỳ vọng: 201 Created
+### ====================================================================
+# @name createCourse
+POST http://localhost:8080/api/v1/admin/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250099",
+  "courseName": "Trí tuệ nhân tạo",
+  "credits": 3,
+  "theoryHours": 30,
+  "practiceHours": 30,
+  "description": "Học phần nền tảng về AI và Machine Learning",
+  "department": "Khoa CNTT",
+  "status": "ACTIVE"
+}
+
+### Biến lưu ID học phần vừa tạo
+@createdCourseId = {{createCourse.response.body.data.id}}
+
+### ====================================================================
+### 3. NEGATIVE TEST 1: TẠO TRÙNG MÃ HỌC PHẦN (DUPLICATE courseCode)
+### Kỳ vọng: 400 Bad Request, thông báo "Mã học phần '1250099' đã tồn tại trong hệ thống"
+### ====================================================================
+POST http://localhost:8080/api/v1/admin/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250099",
+  "courseName": "Trùng mã học phần",
+  "credits": 2,
+  "theoryHours": 15,
+  "practiceHours": 15,
+  "department": "Khoa CNTT"
+}
+
+### ====================================================================
+### 4. NEGATIVE TEST 2: VALIDATION LỖI — Mã và tên trống
+### Kỳ vọng: 400 Bad Request kèm thông báo validation
+### ====================================================================
+POST http://localhost:8080/api/v1/admin/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "",
+  "courseName": "",
+  "credits": 2,
+  "theoryHours": 15,
+  "practiceHours": 15
+}
+
+### ====================================================================
+### 5. NEGATIVE TEST 3: VALIDATION LỖI — credits <= 0
+### Kỳ vọng: 400 Bad Request, "Số tín chỉ phải lớn hơn hoặc bằng 1"
+### ====================================================================
+POST http://localhost:8080/api/v1/admin/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "9999999",
+  "courseName": "Học phần tín chỉ sai",
+  "credits": 0,
+  "theoryHours": 15,
+  "practiceHours": 15
+}
+
+### ====================================================================
+### 6. F19: LẤY TẤT CẢ HỌC PHẦN (GET /api/v1/admin/courses)
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 7. F19: TÌM KIẾM THEO TỪ KHÓA (keyword trên courseCode + courseName)
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses?keyword=Trí+tuệ
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 8. F19: LỌC THEO KHOA & TRẠNG THÁI
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses?department=Khoa+CNTT&status=ACTIVE
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 9. F19: KẾT HỢP TÌM KIẾM TỪ KHÓA + BỘ LỌC
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses?keyword=1250&status=ACTIVE
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 10. F20: XEM CHI TIẾT HỌC PHẦN THEO ID
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses/{{createdCourseId}}
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 11. F20: XEM CHI TIẾT HỌC PHẦN THEO MÃ HỌC PHẦN (BUSINESS KEY)
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses/code/1250099
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 12. F20: XEM HỌC PHẦN ĐÃ CÓ SẴN TỪ SEED (courseCode = 1250052)
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses/code/1250052
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 13. F18: CẬP NHẬT THÔNG TIN HỌC PHẦN (PUT /api/v1/admin/courses/{id})
+### Lưu ý: courseCode KHÔNG thay đổi, chỉ cập nhật các trường cho phép
+### ====================================================================
+PUT http://localhost:8080/api/v1/admin/courses/{{createdCourseId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseName": "Trí tuệ nhân tạo & Học sâu",
+  "credits": 4,
+  "theoryHours": 45,
+  "practiceHours": 30,
+  "description": "Nâng cấp nội dung bao gồm Deep Learning và Neural Networks",
+  "department": "Khoa CNTT",
+  "status": "ACTIVE"
+}
+
+### ====================================================================
+### 14. XÁC NHẬN SAU CẬP NHẬT: courseCode vẫn giữ nguyên "1250099"
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses/{{createdCourseId}}
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 15. F18: XÓA MỀM HỌC PHẦN (SOFT DELETE - DELETE /api/v1/admin/courses/{id})
+### Kỳ vọng: status chuyển thành "INACTIVE", document không bị xóa khỏi MongoDB
+### ====================================================================
+DELETE http://localhost:8080/api/v1/admin/courses/{{createdCourseId}}
+Authorization: Bearer {{authToken}}
+
+### ====================================================================
+### 16. XÁC NHẬN TRẠNG THÁI SAU KHI XÓA MỀM (status = "INACTIVE")
+### ====================================================================
+GET http://localhost:8080/api/v1/admin/courses/{{createdCourseId}}
+Authorization: Bearer {{authToken}}
