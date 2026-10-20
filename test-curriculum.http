@@ -1,0 +1,358 @@
+@authToken = dummy
+@createdCurriculumId = dummy
+@clonedCurriculumId = dummy
+@seededCurriculumId = dummy
+
+### ====================================================================
+### TEST SUITE: PHASE A2 - QUẢN LÝ CHƯƠNG TRÌNH ĐÀO TẠO (CURRICULUM CORE, DEEP CLONE & VERSIONING)
+### Chức năng: F04, F05, F08, F06, F07, F09
+### Base URL: http://localhost:8080/api/curriculums
+### Chuẩn: Native IntelliJ IDEA HTTP Client (> {% ... %} & < {% ... %})
+### ====================================================================
+
+### 1. Đăng nhập Admin lấy JWT Token
+# @name loginAdmin
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@huflit.edu.vn",
+  "password": "123456"
+}
+
+> {%
+    client.test("Login Admin returns 200 and token", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.token != null, "Token must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.token) {
+        client.global.set("authToken", response.body.data.token);
+    }
+%}
+
+### ====================================================================
+### 2. F04: TRUY VẤN DANH SÁCH CTĐT & LỌC THEO KHÓA (GET /api/curriculums)
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums?cohort=K2025
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get curriculums by cohort returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Curriculums list should not be empty");
+    });
+%}
+
+### ====================================================================
+### 3. F08: XEM CHI TIẾT CTĐT THEO MÃ (GET /api/curriculums/code/{curriculumCode})
+### ====================================================================
+# @name getSeededCurriculum
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/code/CTDT-CNTT-K2025
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get seeded curriculum returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.curriculumCode === "CTDT-CNTT-K2025", "Code mismatch");
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Seeded curriculum ID must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("seededCurriculumId", response.body.data.id);
+    }
+%}
+
+### ====================================================================
+### 4. F05: TẠO MỚI CHƯƠNG TRÌNH ĐÀO TẠO (HAPPY PATH - POST /api/curriculums)
+### Kỳ vọng: 201 Created
+### ====================================================================
+# @name createCurriculum
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/curriculums
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "curriculumCode": "CTDT-CNTT-K2026-CH",
+  "curriculumName": "Chương trình đào tạo Công nghệ Thông tin Chuẩn - Khóa 2026",
+  "majorId": "66e01a01f1a2b3c4d5e6f902",
+  "cohort": "K2026",
+  "appliedYear": 2026,
+  "totalCredits": 135,
+  "description": "CTĐT chất lượng cao định hướng phát triển AI và Cloud",
+  "status": "ACTIVE",
+  "specializationSelectionTiming": "LATER",
+  "specializationSelectionSemester": 3,
+  "specializations": [
+    { "code": "CNPM", "name": "Công nghệ Phần mềm" },
+    { "code": "AI", "name": "Trí tuệ Nhân tạo & Dữ liệu lớn" }
+  ],
+  "knowledgeGroups": [
+    { "groupCode": "DC", "groupName": "Kiến thức đại cương", "order": 1 },
+    { "groupCode": "CS", "groupName": "Kiến thức cơ sở ngành", "order": 2 },
+    { "groupCode": "CN", "groupName": "Kiến thức chuyên ngành", "order": 3 }
+  ],
+  "semesters": [
+    {
+      "semesterNumber": 1,
+      "courses": [
+        {
+          "courseCode": "1250052",
+          "courseName": "Nhập môn công nghệ thông tin",
+          "credits": 2,
+          "type": "MANDATORY",
+          "knowledgeGroupCode": "CS",
+          "specializationCodes": [],
+          "prerequisiteCourseCodes": []
+        },
+        {
+          "courseCode": "1250064",
+          "courseName": "Nhập môn lập trình",
+          "credits": 4,
+          "type": "MANDATORY",
+          "knowledgeGroupCode": "CS",
+          "specializationCodes": [],
+          "prerequisiteCourseCodes": []
+        }
+      ]
+    },
+    {
+      "semesterNumber": 2,
+      "courses": [
+        {
+          "courseCode": "1221014",
+          "courseName": "Cấu trúc dữ liệu và giải thuật",
+          "credits": 4,
+          "type": "MANDATORY",
+          "knowledgeGroupCode": "CN",
+          "specializationCodes": ["CNPM", "AI"],
+          "prerequisiteCourseCodes": ["1250064"]
+        }
+      ]
+    }
+  ]
+}
+
+> {%
+    client.test("Create Curriculum returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Curriculum ID must not be null");
+        client.assert(response.body && response.body.data && response.body.data.curriculumCode === "CTDT-CNTT-K2026-CH", "Code mismatch");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("createdCurriculumId", response.body.data.id);
+    }
+%}
+
+### ====================================================================
+### 5. NEGATIVE TEST 1: TẠO TRÙNG MÃ CTĐT (DUPLICATE curriculumCode)
+### Kỳ vọng: 400 Bad Request, "Mã chương trình đào tạo 'CTDT-CNTT-K2026-CH' đã tồn tại trong hệ thống"
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/curriculums
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "curriculumCode": "CTDT-CNTT-K2026-CH",
+  "curriculumName": "CTĐT Trùng Lặp",
+  "majorId": "66e01a01f1a2b3c4d5e6f902",
+  "cohort": "K2026",
+  "appliedYear": 2026
+}
+
+> {%
+    client.test("Duplicate curriculumCode returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 6. NEGATIVE TEST 2: THIẾU THUỘC TÍNH BẮT BUỘC HOẶC majorId KHÔNG TỒN TẠI
+### Kỳ vọng: 400 Bad Request
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/curriculums
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "curriculumCode": "CTDT-INVALID",
+  "curriculumName": "CTĐT Sai majorId",
+  "majorId": "000000000000000000000000",
+  "cohort": "K2026",
+  "appliedYear": 2026
+}
+
+> {%
+    client.test("Invalid majorId returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 7. F06: CẬP NHẬT THÔNG TIN CTĐT (PUT /api/curriculums/{id})
+### Lưu ý: curriculumCode là bất biến (không thay đổi)
+### Kỳ vọng: 200 OK kèm thông tin đã cập nhật
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdCurriculumId")) {
+        request.variables.set("createdCurriculumId", client.global.get("createdCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{createdCurriculumId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "curriculumName": "Chương trình đào tạo Công nghệ Thông tin Chuẩn - Khóa 2026 (Đã cập nhật)",
+  "cohort": "K2026",
+  "appliedYear": 2026,
+  "totalCredits": 140,
+  "description": "Bổ sung môn đồ án tốt nghiệp và thực tập doanh nghiệp",
+  "status": "ACTIVE",
+  "specializationSelectionTiming": "LATER",
+  "specializationSelectionSemester": 4
+}
+
+> {%
+    client.test("Update curriculum returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.totalCredits === 140, "totalCredits was not updated");
+        client.assert(response.body && response.body.data && response.body.data.curriculumCode === "CTDT-CNTT-K2026-CH", "curriculumCode must not change");
+    });
+%}
+
+### ====================================================================
+### 8. F07: DEEP CLONE CTĐT SANG KHÓA MỚI (POST /api/curriculums/{id}/clone)
+### Thực hiện Deep Clone toàn bộ cây kiến thức, học kỳ, môn học sang CTĐT mới
+### Kỳ vọng: 201 Created, clonedFromCurriculumId = ID bản gốc
+### ====================================================================
+# @name cloneCurriculum
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdCurriculumId")) {
+        request.variables.set("createdCurriculumId", client.global.get("createdCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{createdCurriculumId}}/clone
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "newCurriculumCode": "CTDT-CNTT-K2027",
+  "newCurriculumName": "Chương trình đào tạo Công nghệ Thông tin - Khóa 2027 (Kế thừa từ K2026)",
+  "newCohort": "K2027",
+  "newAppliedYear": 2027,
+  "description": "Bản sao độc lập cho khóa tuyển sinh 2027",
+  "status": "ACTIVE"
+}
+
+> {%
+    client.test("Clone curriculum returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Cloned ID must not be null");
+        client.assert(response.body && response.body.data && response.body.data.clonedFromCurriculumId === client.global.get("createdCurriculumId"), "clonedFromCurriculumId must point to original");
+        client.assert(response.body && response.body.data && response.body.data.curriculumCode === "CTDT-CNTT-K2027", "Expected curriculumCode CTDT-CNTT-K2027");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("clonedCurriculumId", response.body.data.id);
+    }
+%}
+
+### ====================================================================
+### 9. XÁC NHẬN TÍNH ĐỘC LẬP CỦA BẢN CLONE (BR03)
+### Kỳ vọng: Xem chi tiết bản clone, clonedFromCurriculumId trỏ đến createdCurriculumId,
+### đầy đủ cấu trúc nested specializations, knowledgeGroups, semesters
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdCurriculumId")) {
+        request.variables.set("createdCurriculumId", client.global.get("createdCurriculumId"));
+    }
+    if (client.global.get("clonedCurriculumId")) {
+        request.variables.set("clonedCurriculumId", client.global.get("clonedCurriculumId"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/{{clonedCurriculumId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Verify clone structure independence", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.clonedFromCurriculumId === client.global.get("createdCurriculumId"), "clonedFrom must match source ID");
+        client.assert(response.body && response.body.data && response.body.data.knowledgeGroups.length > 0, "knowledgeGroups must be copied");
+        client.assert(response.body && response.body.data && response.body.data.semesters.length > 0, "semesters must be copied");
+    });
+%}
+
+### ====================================================================
+### 10. F09: SOFT DELETE / LƯU TRỮ CTĐT (DELETE /api/curriculums/{id})
+### Kỳ vọng: status chuyển thành "ARCHIVED", tài liệu KHÔNG bị xóa khỏi MongoDB (BR02)
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdCurriculumId")) {
+        request.variables.set("createdCurriculumId", client.global.get("createdCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{createdCurriculumId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Soft delete curriculum returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.status === "ARCHIVED", "Expected status ARCHIVED");
+    });
+%}
+
+### ====================================================================
+### 11. XÁC NHẬN TRẠNG THÁI SAU KHI XÓA MỀM (STATUS = "ARCHIVED")
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdCurriculumId")) {
+        request.variables.set("createdCurriculumId", client.global.get("createdCurriculumId"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/{{createdCurriculumId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Verify status after soft delete is ARCHIVED", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.status === "ARCHIVED", "Status must be ARCHIVED");
+    });
+%}

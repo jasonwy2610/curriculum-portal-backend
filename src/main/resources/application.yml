@@ -2,14 +2,19 @@ server:
   port: 8080
 
 spring:
+  config:
+    # Tự động đọc biến môi trường từ file .env ở thư mục gốc (nếu có)
+    import: optional:file:.env[.properties]
+
   # Cấu hình Driver kết nối MongoDB cấp hệ thống
   mongodb:
-    uri: mongodb+srv://portal_admin:Huflit2026Secure@cluster0.uqbqgiy.mongodb.net/training_program_db?appName=Cluster0
+    uri: ${MONGODB_URI}
+
   # Cấu hình hành vi tầng Spring Data Repositories
   data:
     mongodb:
       auto-index-creation: false
 
 jwt:
-  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-  expiration-ms: 86400000 # 24 giờ
+  secret: ${JWT_SECRET}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000} # 24 giờ
