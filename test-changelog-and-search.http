@@ -1,0 +1,382 @@
+@authToken = dummy
+@targetCourseId = dummy
+@targetCurriculumId = dummy
+
+### ====================================================================
+### TEST SUITE: PHASE A4 - TÌM KIẾM NÂNG CAO (F39) & AUDIT TRAIL (F41, F42)
+### Base URL: http://localhost:8080/api
+### Chuẩn: Native IntelliJ IDEA HTTP Client (> {% ... %} & < {% ... %})
+### ====================================================================
+
+### 1. Đăng nhập Admin lấy JWT Token
+# @name loginAdmin
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@huflit.edu.vn",
+  "password": "123456"
+}
+
+> {%
+    client.test("Login Admin returns 200 and token", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.token != null, "Token must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.token) {
+        client.global.set("authToken", response.body.data.token);
+    }
+%}
+
+### ====================================================================
+### PHẦN 1: F39 — TÌM KIẾM & BỘ LỌC NÂNG CAO CHƯƠNG TRÌNH ĐÀO TẠO
+### ====================================================================
+
+### 2. F39: Tìm kiếm CTĐT theo từ khóa (keyword = "Công nghệ Thông tin")
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums?keyword=Công nghệ Thông tin
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Search curriculums by keyword returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Expected at least 1 matching curriculum");
+    });
+%}
+
+### 3. F39: Lọc CTĐT theo khóa tuyển sinh và trạng thái (cohort = K2025 & status = ACTIVE)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums?cohort=K2025&status=ACTIVE
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Filter curriculums by cohort and status returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        if (response.body.data.length > 0) {
+            client.assert(response.body.data[0].cohort === "K2025", "Cohort must be K2025");
+            client.assert(response.body.data[0].status === "ACTIVE", "Status must be ACTIVE");
+        }
+    });
+%}
+
+### 4. F39: Lọc CTĐT có chứa học phần cụ thể (courseCode = 1250052)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums?courseCode=1250052
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Filter curriculums containing courseCode 1250052 returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Expected curriculums containing course 1250052");
+    });
+%}
+
+### 5. F39: Lọc CTĐT theo mã ngành đào tạo (majorId = 7480101)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums?majorId=7480101
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Filter curriculums by majorCode 7480101 returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Expected curriculums for major 7480101");
+    });
+%}
+
+### ====================================================================
+### PHẦN 2: F42 — AUDIT TRAIL / CHANGE LOGS CHO HỌC PHẦN (COURSE)
+### ====================================================================
+
+### 6. Khởi tạo hoặc chuẩn bị học phần 1250099 để kiểm thử F42
+# @name createOrEnsureCourse
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250099",
+  "courseName": "Lập trình Web Nâng Cao F42",
+  "credits": 3,
+  "theoryHours": 30,
+  "practiceHours": 30,
+  "department": "Khoa Công nghệ Thông tin",
+  "description": "Học phần phục vụ kiểm thử Audit Trail F42",
+  "status": "ACTIVE"
+}
+
+> {%
+    client.test("Create course returns 201 or 400 (already exists)", function() {
+        client.assert(response.status === 201 || response.status === 400, "Expected 201 or 400");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("targetCourseId", response.body.data.id);
+    }
+%}
+
+### 7. Lấy chi tiết học phần 1250099 để lấy chính xác targetCourseId
+# @name getCourseByCode
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/courses/code/1250099
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get course 1250099 returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Course ID must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("targetCourseId", response.body.data.id);
+    }
+%}
+
+### 8. F42: Cập nhật học phần 1250099 (đổi credits từ 3 sang 4, đổi tên học phần)
+# @name updateCourseTest
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCourseId")) {
+        request.variables.set("targetCourseId", client.global.get("targetCourseId"));
+    }
+%}
+PUT http://localhost:8080/api/courses/{{targetCourseId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseName": "Lập trình Web Nâng Cao và Điện toán Đám mây F42",
+  "credits": 4,
+  "theoryHours": 45,
+  "practiceHours": 30,
+  "department": "Khoa Công nghệ Thông tin",
+  "description": "Mô tả đã được cập nhật kiểm thử vết kiểm toán F42",
+  "status": "ACTIVE"
+}
+
+> {%
+    client.test("Update course returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.credits === 4, "Credits must be 4");
+    });
+%}
+
+### 9. F42: Tra cứu vết kiểm toán học phần qua API lọc chung (GET /api/change-logs?entityType=Course)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCourseId")) {
+        request.variables.set("targetCourseId", client.global.get("targetCourseId"));
+    }
+%}
+GET http://localhost:8080/api/change-logs?entityType=Course&entityId={{targetCourseId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Query course change logs returns 200 OK with recorded changes", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Must have recorded change logs");
+        var latest = response.body.data[0];
+        client.assert(latest.entityType === "Course", "Entity type must be Course");
+        client.assert(latest.action === "UPDATE" || latest.action === "CREATE", "Action must be UPDATE or CREATE");
+        client.assert(latest.changedBy != null, "changedBy ObjectId must be recorded");
+        client.assert(latest.changes != null && latest.changes.length > 0, "Changes array must not be empty");
+    });
+%}
+
+### 10. F42: Tra cứu vết kiểm toán học phần qua sub-resource (GET /api/courses/{id}/change-logs)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCourseId")) {
+        request.variables.set("targetCourseId", client.global.get("targetCourseId"));
+    }
+%}
+GET http://localhost:8080/api/courses/{{targetCourseId}}/change-logs
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Course sub-resource change-logs returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.length > 0, "Expected at least 1 change log entry");
+    });
+%}
+
+### 11. F42: Xóa mềm học phần (DELETE /api/courses/{id}) và kiểm tra audit log ghi nhận action UPDATE
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCourseId")) {
+        request.variables.set("targetCourseId", client.global.get("targetCourseId"));
+    }
+%}
+DELETE http://localhost:8080/api/courses/{{targetCourseId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Soft delete course returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.status === "INACTIVE", "Status must become INACTIVE");
+    });
+%}
+
+### 12. F42: Kiểm tra audit log của thao tác xóa mềm (chuyển status -> INACTIVE)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCourseId")) {
+        request.variables.set("targetCourseId", client.global.get("targetCourseId"));
+    }
+%}
+GET http://localhost:8080/api/change-logs/course/{{targetCourseId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Verify soft delete change log recorded in MongoDB", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        var latest = response.body.data[0];
+        client.assert(latest.action === "UPDATE", "Soft delete action must be recorded as UPDATE");
+        var hasStatusChange = latest.changes.some(function(c) {
+            return c.field === "status" && c.newValue === "INACTIVE";
+        });
+        client.assert(hasStatusChange, "Changes must record status changing to INACTIVE");
+    });
+%}
+
+### ====================================================================
+### PHẦN 3: F41 — AUDIT TRAIL / CHANGE LOGS CHO CTĐT (CURRICULUM)
+### ====================================================================
+
+### 13. Lấy thông tin CTĐT CTDT-CNTT-K2026-STRUCT để lấy targetCurriculumId
+# @name getCurriculumForF41
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/code/CTDT-CNTT-K2026-STRUCT
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get curriculum for F41 returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Curriculum ID must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("targetCurriculumId", response.body.data.id);
+    }
+%}
+
+### 14. F41: Cập nhật thông tin mô tả và số tín chỉ của CTĐT (PUT /api/curriculums/{id})
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCurriculumId")) {
+        request.variables.set("targetCurriculumId", client.global.get("targetCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{targetCurriculumId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "curriculumName": "Chương trình đào tạo Thử nghiệm Cấu trúc 2026 (Audit Update)",
+  "description": "Mô tả CTĐT đã được cập nhật qua bài kiểm thử tự động F41 Audit Trail",
+  "appliedYear": 2026
+}
+
+> {%
+    client.test("Update curriculum returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+    });
+%}
+
+### 15. F41: Tra cứu vết kiểm toán CTĐT qua API lọc chung (GET /api/change-logs?entityType=Curriculum)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCurriculumId")) {
+        request.variables.set("targetCurriculumId", client.global.get("targetCurriculumId"));
+    }
+%}
+GET http://localhost:8080/api/change-logs?entityType=Curriculum&entityId={{targetCurriculumId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Query curriculum change logs returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Must have curriculum change logs");
+        var latest = response.body.data[0];
+        client.assert(latest.entityType === "Curriculum", "Entity type must be Curriculum");
+        client.assert(latest.action === "UPDATE", "Action must be UPDATE");
+        client.assert(latest.changedBy != null, "changedBy must not be null");
+    });
+%}
+
+### 16. F41: Tra cứu vết kiểm toán CTĐT qua sub-resource (GET /api/curriculums/{id}/change-logs)
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCurriculumId")) {
+        request.variables.set("targetCurriculumId", client.global.get("targetCurriculumId"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/{{targetCurriculumId}}/change-logs
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Curriculum sub-resource change-logs returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.length > 0, "Must return change logs");
+    });
+%}
+
+### 17. F41: Tra cứu trực tiếp theo URL /api/change-logs/curriculum/{curriculumId}
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("targetCurriculumId")) {
+        request.variables.set("targetCurriculumId", client.global.get("targetCurriculumId"));
+    }
+%}
+GET http://localhost:8080/api/change-logs/curriculum/{{targetCurriculumId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Curriculum direct change-logs endpoint returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.length > 0, "Must return change logs");
+    });
+%}

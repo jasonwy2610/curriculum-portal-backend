@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.entity;
+package vn.edu.huflit.portal.course.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

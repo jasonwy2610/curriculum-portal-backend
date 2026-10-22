@@ -1,0 +1,583 @@
+@authToken = dummy
+@testCurriculumId = dummy
+
+### ====================================================================
+### TEST SUITE: PHASE A3 - QUẢN LÝ CẤU TRÚC CTĐT (F10, F11, F12, F13, F14, F16, F17)
+### Base URL: http://localhost:8080/api/curriculums
+### Chuẩn: Native IntelliJ IDEA HTTP Client (> {% ... %} & < {% ... %})
+### ====================================================================
+
+### 1. Đăng nhập Admin lấy JWT Token
+# @name loginAdmin
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@huflit.edu.vn",
+  "password": "123456"
+}
+
+> {%
+    client.test("Login Admin returns 200 and token", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.token != null, "Token must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.token) {
+        client.global.set("authToken", response.body.data.token);
+    }
+%}
+
+### ====================================================================
+### 2. LẤY HOẶC KHỞI TẠO CTĐT THỬ NGHIỆM QUA ENDPOINTS CHUẨN (IDEMPOTENT)
+### ====================================================================
+
+### 2a. Khởi tạo CTĐT nếu chưa tồn tại (POST /api/curriculums)
+# @name createTestCurriculum
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/curriculums
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "curriculumCode": "CTDT-CNTT-K2026-STRUCT",
+  "curriculumName": "Chương trình đào tạo Thử nghiệm Cấu trúc 2026",
+  "majorId": "66e01a01f1a2b3c4d5e6f902",
+  "cohort": "K2026",
+  "appliedYear": 2026,
+  "description": "CTĐT phục vụ kiểm thử cấu trúc (F10–F17)",
+  "status": "ACTIVE",
+  "specializationSelectionTiming": "LATER",
+  "specializationSelectionSemester": 4
+}
+
+> {%
+    client.test("Create test curriculum returns 201 or 400 (already exists)", function() {
+        client.assert(response.status === 201 || response.status === 400, "Expected 201 Created or 400 Already Exists");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("testCurriculumId", response.body.data.id);
+    }
+%}
+
+### 2b. Lấy thông tin CTĐT chuẩn theo mã nghiệp vụ (GET /api/curriculums/code/{code})
+# @name getTestCurriculumByCode
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/code/CTDT-CNTT-K2026-STRUCT
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Fetch test curriculum by code returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Curriculum ID must not be null");
+        client.assert(response.body.data.curriculumCode === "CTDT-CNTT-K2026-STRUCT", "Expected code CTDT-CNTT-K2026-STRUCT");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("testCurriculumId", response.body.data.id);
+    }
+%}
+
+### 2c. Dọn dẹp học phần tồn đọng từ các lần chạy trước để đảm bảo idempotency
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses/1250052
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Cleanup course 1250052 returns 200 or 400", function() {
+        client.assert(response.status === 200 || response.status === 400, "Expected 200 or 400");
+    });
+%}
+
+### 2d. Dọn dẹp học phần 1250064
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses/1250064
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Cleanup course 1250064 returns 200 or 400", function() {
+        client.assert(response.status === 200 || response.status === 400, "Expected 200 or 400");
+    });
+%}
+
+### 2e. Dọn dẹp học phần 1221014
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses/1221014
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Cleanup course 1221014 returns 200 or 400", function() {
+        client.assert(response.status === 200 || response.status === 400, "Expected 200 or 400");
+    });
+%}
+
+### ====================================================================
+### 3. F10: THIẾT LẬP DANH SÁCH NHÓM KIẾN THỨC (PUT /api/curriculums/{id}/knowledge-groups)
+### Kỳ vọng: 200 OK, lưu 3 nhóm DC, CS, CN
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{testCurriculumId}}/knowledge-groups
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+[
+  { "groupCode": "DC", "groupName": "Khối kiến thức đại cương", "order": 1 },
+  { "groupCode": "CS", "groupName": "Khối kiến thức cơ sở ngành", "order": 2 },
+  { "groupCode": "CN", "groupName": "Khối kiến thức chuyên ngành", "order": 3 }
+]
+
+> {%
+    client.test("Replace knowledge groups returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.knowledgeGroups.length === 3, "Expected 3 knowledge groups");
+    });
+%}
+
+### ====================================================================
+### 4. F10: THÊM TỪNG NHÓM KIẾN THỨC MỚI (POST /api/curriculums/{id}/knowledge-groups)
+### Kỳ vọng: 201 Created
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/knowledge-groups
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "groupCode": "TT",
+  "groupName": "Khối kiến thức thực tập và tốt nghiệp",
+  "order": 4
+}
+
+> {%
+    client.test("Add knowledge group returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.knowledgeGroups.length === 4, "Expected 4 knowledge groups");
+    });
+%}
+
+### ====================================================================
+### 5. F10: CẬP NHẬT NHÓM KIẾN THỨC (PUT /api/curriculums/{id}/knowledge-groups/{groupCode})
+### Kỳ vọng: 200 OK
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{testCurriculumId}}/knowledge-groups/TT
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "groupName": "Khối thực tập & Khóa luận tốt nghiệp chuyên sâu",
+  "order": 4
+}
+
+> {%
+    client.test("Update knowledge group returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 6. F16 & F17: CẤU HÌNH ĐỊNH HƯỚNG & THỜI ĐIỂM CHỌN (PUT /api/curriculums/{id}/specializations)
+### Kỳ vọng: 200 OK (specializationSelectionTiming = "LATER", semester = 5)
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{testCurriculumId}}/specializations
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "specializationSelectionTiming": "LATER",
+  "specializationSelectionSemester": 5,
+  "specializations": [
+    { "code": "CNPM", "name": "Công nghệ Phần mềm" },
+    { "code": "AI", "name": "Trí tuệ Nhân tạo & Dữ liệu lớn" },
+    { "code": "ATBM", "name": "An toàn và Bảo mật thông tin" }
+  ]
+}
+
+> {%
+    client.test("Configure specializations returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.specializationSelectionTiming === "LATER", "Timing must be LATER");
+        client.assert(response.body.data.specializationSelectionSemester === 5, "Semester must be 5");
+        client.assert(response.body.data.specializations.length === 3, "Expected 3 specializations");
+    });
+%}
+
+### ====================================================================
+### 7. F17 NEGATIVE TEST (BR18): GỬI LATER NHƯNG HỌC KỲ < 2 HOẶC NULL
+### Kỳ vọng: 400 Bad Request
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{testCurriculumId}}/specializations
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "specializationSelectionTiming": "LATER",
+  "specializationSelectionSemester": 1,
+  "specializations": [
+    { "code": "TEST", "name": "Test" }
+  ]
+}
+
+> {%
+    client.test("Invalid specializationSelectionSemester returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 8. F11–F14 HAPPY PATH: GÁN HỌC PHẦN 1250052 VÀO HỌC KỲ 1
+### Kỳ vọng: 201 Created (Tự động lấy tên & tín chỉ từ Course)
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250052",
+  "semesterNumber": 1,
+  "type": "MANDATORY",
+  "knowledgeGroupCode": "DC",
+  "specializationCodes": [],
+  "prerequisiteCourseCodes": []
+}
+
+> {%
+    client.test("Add course 1250052 to semester 1 returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+        client.assert(response.body.data.totalCredits >= 2, "totalCredits should be updated");
+    });
+%}
+
+### ====================================================================
+### 9. F11–F14 HAPPY PATH: GÁN HỌC PHẦN 1250064 VÀO HỌC KỲ 2 CÓ MÔN TIÊN QUYẾT 1250052
+### Kỳ vọng: 201 Created
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250064",
+  "semesterNumber": 2,
+  "type": "MANDATORY",
+  "knowledgeGroupCode": "CS",
+  "specializationCodes": [],
+  "prerequisiteCourseCodes": ["1250052"]
+}
+
+> {%
+    client.test("Add course 1250064 to semester 2 returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 10. F11–F14 HAPPY PATH: GÁN HỌC PHẦN 1221014 VÀO HỌC KỲ 3 CÓ ĐỊNH HƯỚNG VÀ TIÊN QUYẾT
+### Kỳ vọng: 201 Created
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1221014",
+  "semesterNumber": 3,
+  "type": "MANDATORY",
+  "knowledgeGroupCode": "CN",
+  "specializationCodes": ["CNPM", "AI"],
+  "prerequisiteCourseCodes": ["1250064"]
+}
+
+> {%
+    client.test("Add course 1221014 to semester 3 returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 11. F11 NEGATIVE TEST 1: THÊM TRÙNG HỌC PHẦN 1250052 VÀO CTĐT
+### Kỳ vọng: 400 Bad Request
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250052",
+  "semesterNumber": 3,
+  "type": "ELECTIVE"
+}
+
+> {%
+    client.test("Duplicate courseCode returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 12. F11 NEGATIVE TEST 2: THÊM MÃ HỌC PHẦN KHÔNG TỒN TẠI TRÊN HỆ THỐNG
+### Kỳ vọng: 400 Bad Request
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "9999999",
+  "semesterNumber": 1,
+  "type": "MANDATORY"
+}
+
+> {%
+    client.test("Non-existent courseCode returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 13. F14 NEGATIVE TEST: HỌC PHẦN TỰ ĐẶT CHÍNH NÓ LÀM TIÊN QUYẾT (SELF-PREREQUISITE)
+### Kỳ vọng: 400 Bad Request
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+POST http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "courseCode": "1250099",
+  "semesterNumber": 4,
+  "type": "MANDATORY",
+  "prerequisiteCourseCodes": ["1250099"]
+}
+
+> {%
+    client.test("Self prerequisite returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 14. F12 & F13 UPDATE TEST: DI CHUYỂN 1221014 SANG HỌC KỲ 4, ĐỔI THÀNH ELECTIVE
+### Kỳ vọng: 200 OK, học phần chuyển sang học kỳ 4
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+PUT http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses/1221014
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "semesterNumber": 4,
+  "type": "ELECTIVE",
+  "knowledgeGroupCode": "CN",
+  "specializationCodes": ["AI", "ATBM"],
+  "prerequisiteCourseCodes": ["1250052", "1250064"]
+}
+
+> {%
+    client.test("Move course to semester 4 returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 15. F10 DELETE NEGATIVE TEST: THỬ XÓA NHÓM DC ĐANG CÓ HỌC PHẦN 1250052
+### Kỳ vọng: 400 Bad Request, "Không thể xóa nhóm kiến thức 'DC'..."
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{testCurriculumId}}/knowledge-groups/DC
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Delete referenced knowledge group returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 16. F10 DELETE HAPPY PATH: XÓA NHÓM TT KHÔNG CÓ HỌC PHẦN TRỰC THUỘC
+### Kỳ vọng: 200 OK
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{testCurriculumId}}/knowledge-groups/TT
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Delete unused knowledge group returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 17. F11 DELETE HAPPY PATH: XÓA HỌC PHẦN 1221014 KHỎI CTĐT
+### Kỳ vọng: 200 OK, môn học biến mất khỏi học kỳ 4
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+DELETE http://localhost:8080/api/curriculums/{{testCurriculumId}}/courses/1221014
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Delete course 1221014 returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 18. XÁC NHẬN CHI TIẾT CTĐT SAU KHI THAO TÁC CẤU TRÚC
+### Kỳ vọng: 200 OK, còn 2 môn 1250052 và 1250064, không còn 1221014
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("testCurriculumId")) {
+        request.variables.set("testCurriculumId", client.global.get("testCurriculumId"));
+    }
+%}
+GET http://localhost:8080/api/curriculums/{{testCurriculumId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Verify final curriculum structure returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body.data.curriculumCode === "CTDT-CNTT-K2026-STRUCT", "Code mismatch");
+    });
+%}

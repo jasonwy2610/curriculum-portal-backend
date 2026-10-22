@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.entity;
+package vn.edu.huflit.portal.curriculum.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,7 +10,9 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -20,6 +22,7 @@ import java.util.List;
 @AllArgsConstructor
 @Document(collection = "curriculums")
 public class Curriculum {
+
     @Id
     private ObjectId id;
 
@@ -31,16 +34,30 @@ public class Curriculum {
     private String cohort;
     private Integer appliedYear;
     private Integer totalCredits;
-    private String status; // "ACTIVE" | "ARCHIVED" | "DRAFT"
+    private String description;
+
+    // DRAFT | ACTIVE | ARCHIVED | INACTIVE
+    private String status;
+
     private Integer version;
-    private ObjectId clonedFrom; // Phục vụ F07 (Clone CTĐT)
 
-    private String specializationTrack; // "EARLY" | "LATER"
-    private Integer specializationDecisionSemester;
+    @Field("clonedFrom")
+    private ObjectId clonedFromCurriculumId;
 
-    private List<SpecializationItem> specializations;
-    private List<KnowledgeGroupItem> knowledgeGroups;
-    private List<SemesterItem> semesters;
+    @Field("specializationTrack")
+    private String specializationSelectionTiming; // EARLY | LATER
+
+    @Field("specializationDecisionSemester")
+    private Integer specializationSelectionSemester;
+
+    @Builder.Default
+    private List<SpecializationItem> specializations = new ArrayList<>();
+
+    @Builder.Default
+    private List<KnowledgeGroupItem> knowledgeGroups = new ArrayList<>();
+
+    @Builder.Default
+    private List<SemesterItem> semesters = new ArrayList<>();
 
     private ObjectId createdBy;
 
@@ -51,12 +68,18 @@ public class Curriculum {
     private Date updatedAt;
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class SpecializationItem {
         private String code;
         private String name;
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class KnowledgeGroupItem {
         private String groupCode;
         private String groupName;
@@ -64,17 +87,31 @@ public class Curriculum {
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class SemesterItem {
         private Integer semesterNumber;
-        private List<CurriculumCourseItem> courses;
+
+        @Builder.Default
+        private List<CurriculumCourseItem> courses = new ArrayList<>();
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class CurriculumCourseItem {
         private String courseCode;
-        private String type; // "MANDATORY" | "ELECTIVE"
+        private String courseName;
+        private Integer credits;
+        private String type; // MANDATORY | ELECTIVE
         private String knowledgeGroupCode;
-        private List<String> specializationCodes; // null hoặc rỗng là môn chung
-        private List<String> prerequisiteCourseCodes; // Môn tiên quyết
+
+        @Builder.Default
+        private List<String> specializationCodes = new ArrayList<>();
+
+        @Builder.Default
+        private List<String> prerequisiteCourseCodes = new ArrayList<>();
     }
 }

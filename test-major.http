@@ -1,0 +1,256 @@
+@authToken = dummy
+@createdMajorId = dummy
+
+### ====================================================================
+### TEST SUITE: F15 - QUẢN LÝ NGÀNH ĐÀO TẠO (MAJOR MANAGEMENT CRUD)
+### Base URL: http://localhost:8080/api/majors
+### Chuẩn: Native IntelliJ IDEA HTTP Client (> {% ... %} & < {% ... %})
+### ====================================================================
+
+### 1. Đăng nhập Admin lấy JWT Token
+# @name loginAdmin
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@huflit.edu.vn",
+  "password": "123456"
+}
+
+> {%
+    client.test("Login Admin returns 200 and token", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.token != null, "Token must not be null");
+    });
+    if (response.body && response.body.data && response.body.data.token) {
+        client.global.set("authToken", response.body.data.token);
+    }
+%}
+
+### ====================================================================
+### 2. TẠO NGÀNH ĐÀO TẠO MỚI (HAPPY PATH - POST /api/majors)
+### Kỳ vọng: 201 Created
+### ====================================================================
+# @name createMajor
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/majors
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "code": "7480101",
+  "name": "Khoa học máy tính",
+  "description": "Chương trình đào tạo Cử nhân Khoa học máy tính chuẩn HUFLIT",
+  "status": "ACTIVE"
+}
+
+> {%
+    client.test("Create Major returns 201 Created", function() {
+        client.assert(response.status === 201, "Expected 201 Created but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id != null, "Major ID must not be null");
+        client.assert(response.body && response.body.data && response.body.data.code === "7480101", "Expected code 7480101");
+    });
+    if (response.body && response.body.data && response.body.data.id) {
+        client.global.set("createdMajorId", response.body.data.id);
+    }
+%}
+
+### ====================================================================
+### 3. NEGATIVE TEST 1: THỬ TẠO TRÙNG MÃ NGÀNH (DUPLICATE CODE)
+### Kỳ vọng: 400 Bad Request kèm thông báo "Mã ngành '7480101' đã tồn tại trong hệ thống"
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/majors
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "code": "7480101",
+  "name": "Khoa học máy tính trùng lặp",
+  "description": "Thử nghiệm tạo trùng mã",
+  "status": "ACTIVE"
+}
+
+> {%
+    client.test("Duplicate code returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 4. NEGATIVE TEST 2: VALIDATION ĐẦU VÀO TRỐNG DỮ LIỆU BẮT BUỘC
+### Kỳ vọng: 400 Bad Request kèm thông báo validation
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+POST http://localhost:8080/api/majors
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "code": "",
+  "name": "",
+  "description": "Thiếu cả code và name"
+}
+
+> {%
+    client.test("Validation failure returns 400 Bad Request", function() {
+        client.assert(response.status === 400, "Expected 400 Bad Request but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 5. TRUY VẤN: LẤY TẤT CẢ NGÀNH ĐÀO TẠO
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/majors
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get all majors returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.length > 0, "Majors list should not be empty");
+    });
+%}
+
+### ====================================================================
+### 6. TRUY VẤN: TÌM KIẾM THEO TỪ KHÓA & TRẠNG THÁI
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/majors?keyword=Khoa+học&status=ACTIVE
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Search majors returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+    });
+%}
+
+### ====================================================================
+### 7. TRUY VẤN: LẤY CHI TIẾT NGÀNH THEO ID
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdMajorId")) {
+        request.variables.set("createdMajorId", client.global.get("createdMajorId"));
+    }
+%}
+GET http://localhost:8080/api/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get major by ID returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.id === client.global.get("createdMajorId"), "ID mismatch");
+    });
+%}
+
+### ====================================================================
+### 8. TRUY VẤN: LẤY CHI TIẾT NGÀNH THEO MÃ NGÀNH (CODE)
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+%}
+GET http://localhost:8080/api/majors/code/7480101
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Get major by code returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.code === "7480101", "Code mismatch");
+    });
+%}
+
+### ====================================================================
+### 9. CẬP NHẬT THÔNG TIN NGÀNH (PUT /api/majors/{id})
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdMajorId")) {
+        request.variables.set("createdMajorId", client.global.get("createdMajorId"));
+    }
+%}
+PUT http://localhost:8080/api/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Khoa học máy tính & Trí tuệ nhân tạo",
+  "description": "Cập nhật định hướng chuyên sâu AI và Khoa học dữ liệu",
+  "status": "ACTIVE"
+}
+
+> {%
+    client.test("Update major returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.name === "Khoa học máy tính & Trí tuệ nhân tạo", "Name was not updated");
+    });
+%}
+
+### ====================================================================
+### 10. XÓA MỀM NGÀNH ĐÀO TẠO (SOFT DELETE - DELETE /api/majors/{id})
+### Kỳ vọng: Trạng thái đổi thành "INACTIVE", tài liệu không bị xóa khỏi MongoDB
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdMajorId")) {
+        request.variables.set("createdMajorId", client.global.get("createdMajorId"));
+    }
+%}
+DELETE http://localhost:8080/api/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Soft delete major returns 200 OK", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.status === "INACTIVE", "Expected status INACTIVE");
+    });
+%}
+
+### ====================================================================
+### 11. XÁC NHẬN LẠI TRẠNG THÁI SAU KHI XÓA MỀM (STATUS = INACTIVE)
+### ====================================================================
+< {%
+    if (client.global.get("authToken")) {
+        request.variables.set("authToken", client.global.get("authToken"));
+    }
+    if (client.global.get("createdMajorId")) {
+        request.variables.set("createdMajorId", client.global.get("createdMajorId"));
+    }
+%}
+GET http://localhost:8080/api/majors/{{createdMajorId}}
+Authorization: Bearer {{authToken}}
+
+> {%
+    client.test("Verify major status after soft delete is INACTIVE", function() {
+        client.assert(response.status === 200, "Expected 200 OK but got " + response.status);
+        client.assert(response.body && response.body.data && response.body.data.status === "INACTIVE", "Status must be INACTIVE");
+    });
+%}

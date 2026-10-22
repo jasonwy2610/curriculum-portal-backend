@@ -8,7 +8,9 @@ target/
 .classpath
 .factorypath
 .project
-.settings
+.settings/*
+!.settings/org.eclipse.jdt.core.prefs
+!.settings/org.eclipse.jdt.apt.core.prefs
 .springBeans
 .sts4-cache
 
@@ -27,3 +29,11 @@ target/
 
 ### Logs ###
 *.log
+.vscode/
+
+.vs/
+frontend/node_modules/
+frontend/dist/
+
+on
+tatus

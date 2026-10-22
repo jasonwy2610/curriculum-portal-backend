@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.entity;
+package vn.edu.huflit.portal.changelog.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,7 +23,7 @@ public class ChangeLog {
 
     private String entityType; // "Curriculum" | "Course" | "ReplacementRule"
     private ObjectId entityId; // Polymorphic reference
-    private String action;     // "CREATE" | "UPDATE" | "CLONE"
+    private String action;     // "CREATE" | "UPDATE" | "CLONE" | "DELETE"
     private List<FieldChangeItem> changes;
     private ObjectId changedBy;
 
@@ -31,6 +31,9 @@ public class ChangeLog {
     private Date createdAt;
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class FieldChangeItem {
         private String field;
         private Object oldValue;
