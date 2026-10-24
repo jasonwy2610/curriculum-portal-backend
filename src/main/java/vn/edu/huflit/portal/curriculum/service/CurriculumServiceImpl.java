@@ -17,6 +17,9 @@ import vn.edu.huflit.portal.curriculum.dto.*;
 import vn.edu.huflit.portal.curriculum.model.Curriculum;
 import vn.edu.huflit.portal.curriculum.repository.CurriculumRepository;
 import vn.edu.huflit.portal.entity.User;
+import vn.edu.huflit.portal.entity.Notification;
+import vn.edu.huflit.portal.notification.repository.NotificationRepository;
+import vn.edu.huflit.portal.repository.UserRepository;
 import vn.edu.huflit.portal.major.model.Major;
 import vn.edu.huflit.portal.major.repository.MajorRepository;
 
@@ -33,6 +36,8 @@ public class CurriculumServiceImpl implements CurriculumService {
     private final CourseRepository courseRepository;
     private final MongoTemplate mongoTemplate;
     private final ChangeLogService changeLogService;
+    private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
 
     @Override
     public List<CurriculumResponse> getAllCurriculums(String majorId, String cohort, Integer appliedYear, String status,
@@ -406,6 +411,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         }
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         // F41: Ghi nhận vết kiểm toán khi cập nhật CTĐT (action = UPDATE)
         if (!changes.isEmpty()) {
@@ -541,6 +547,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         // BR02: TUYỆT ĐỐI KHÔNG XÓA CỨNG DỮ LIỆU CTĐT, ÁP DỤNG SOFT-DELETE BẰNG STATUS ARCHIVED / INACTIVE
         curriculum.setStatus("ARCHIVED");
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         // F41: Ghi nhận vết kiểm toán khi chuyển status sang ARCHIVED (action = UPDATE)
         List<ChangeLog.FieldChangeItem> changes = List.of(
@@ -598,6 +605,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         int oldSize = curriculum.getKnowledgeGroups() != null ? curriculum.getKnowledgeGroups().size() : 0;
         curriculum.setKnowledgeGroups(items);
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("knowledgeGroups", oldSize, items.size())
@@ -632,6 +640,7 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .build());
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("knowledgeGroups", null, "Added group: " + code)
@@ -667,6 +676,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         }
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("knowledgeGroups." + targetCode, oldName, item.getGroupName())
@@ -699,6 +709,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         }
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("knowledgeGroups", "Deleted group: " + targetCode, null)
@@ -751,6 +762,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         }
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = new ArrayList<>();
         changes.add(new ChangeLog.FieldChangeItem("specializationSelectionTiming", oldTiming, curriculum.getSpecializationSelectionTiming()));
@@ -785,6 +797,7 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .build());
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("specializations", null, "Added specialization: " + code)
@@ -820,6 +833,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         }
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("specializations", "Deleted specialization: " + targetCode, null)
@@ -946,6 +960,7 @@ public class CurriculumServiceImpl implements CurriculumService {
         recalculateTotalCredits(curriculum);
 
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("courses", null, "Added course: " + courseCode + " to semester " + semNum)
@@ -1068,6 +1083,7 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         recalculateTotalCredits(curriculum);
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("courses." + targetCode,
@@ -1118,6 +1134,7 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         recalculateTotalCredits(curriculum);
         Curriculum updated = curriculumRepository.save(curriculum);
+        notifyCurriculumStudents(updated, "CTĐT đã thay đổi", "Chương trình đào tạo \"" + updated.getCurriculumName() + "\" đã được cập nhật. Vui lòng xem lại lộ trình học tập của bạn.");
 
         List<ChangeLog.FieldChangeItem> changes = List.of(
                 new ChangeLog.FieldChangeItem("courses", "Removed course: " + targetCode, null)
@@ -1130,6 +1147,29 @@ public class CurriculumServiceImpl implements CurriculumService {
     // ====================================================================================
     // PRIVATE HELPER METHODS
     // ====================================================================================
+
+    private void notifyCurriculumStudents(Curriculum curriculum, String title, String message) {
+        if (curriculum == null || curriculum.getId() == null) return;
+        List<ObjectId> recipientIds = userRepository
+                .findByCurriculumIdAndRole(curriculum.getId(), "STUDENT")
+                .stream()
+                .filter(user -> user.getId() != null && !"INACTIVE".equalsIgnoreCase(user.getStatus()))
+                .map(User::getId)
+                .distinct()
+                .toList();
+        if (recipientIds.isEmpty()) return;
+
+        notificationRepository.save(Notification.builder()
+                .type("CURRICULUM_CHANGE")
+                .title(title)
+                .message(message)
+                .curriculumId(curriculum.getId())
+                .recipientIds(new ArrayList<>(recipientIds))
+                .readBy(new ArrayList<>())
+                .createdBy(getCurrentUserId())
+                .createdAt(new Date())
+                .build());
+    }
 
     private void validateSpecializationTiming(String timing, Integer semester) {
         if (timing == null || timing.trim().isEmpty()) {

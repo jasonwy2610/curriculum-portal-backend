@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.service.impl;
+package vn.edu.huflit.portal.academic.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.bson.types.ObjectId;
@@ -7,9 +7,9 @@ import org.springframework.util.StringUtils;
 import vn.edu.huflit.portal.dto.request.AddAcademicAttemptRequest;
 import vn.edu.huflit.portal.dto.response.AcademicRecordResponse;
 import vn.edu.huflit.portal.entity.AcademicRecord;
-import vn.edu.huflit.portal.repository.AcademicRecordRepository;
-import vn.edu.huflit.portal.service.AcademicRecordService;
-import vn.edu.huflit.portal.service.GradeConversionService;
+import vn.edu.huflit.portal.academic.repository.AcademicRecordRepository;
+import vn.edu.huflit.portal.academic.service.AcademicRecordService;
+import vn.edu.huflit.portal.academic.service.GradeConversionService;
 
 import java.util.ArrayList;
 import java.util.Comparator;

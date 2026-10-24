@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.service;
+package vn.edu.huflit.portal.academic.service;
 
 public interface GradeConversionService {
 

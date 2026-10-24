@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.controller;
+package vn.edu.huflit.portal.academic.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.bson.types.ObjectId;
@@ -8,7 +8,7 @@ import vn.edu.huflit.portal.dto.request.AdminAddAcademicAttemptRequest;
 import vn.edu.huflit.portal.dto.response.*;
 import vn.edu.huflit.portal.entity.User;
 import vn.edu.huflit.portal.repository.UserRepository;
-import vn.edu.huflit.portal.service.AcademicRecordService;
+import vn.edu.huflit.portal.academic.service.AcademicRecordService;
 import java.util.List;
 
 @RestController

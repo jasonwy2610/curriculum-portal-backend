@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.service.impl;
+package vn.edu.huflit.portal.notification.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.bson.types.ObjectId;
@@ -6,9 +6,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import vn.edu.huflit.portal.entity.Notification;
 import vn.edu.huflit.portal.entity.User;
-import vn.edu.huflit.portal.repository.NotificationRepository;
+import vn.edu.huflit.portal.notification.repository.NotificationRepository;
 import vn.edu.huflit.portal.repository.UserRepository;
-import vn.edu.huflit.portal.service.NotificationService;
+import vn.edu.huflit.portal.notification.service.NotificationService;
 import java.util.*;
 
 @Service
@@ -30,6 +30,12 @@ public class NotificationServiceImpl implements NotificationService {
    if(!n.getReadBy().contains(user.getId())) n.getReadBy().add(user.getId());
    repository.save(n);
    return view(n,user);
+ }
+ @Override public Map<String,Object> markUnread(User user, String id) {
+   Notification n = getVisible(user, id);
+   if (n.getReadBy() != null) n.getReadBy().removeIf(readId -> readId.equals(user.getId()));
+   repository.save(n);
+   return view(n, user);
  }
  @Override public List<Notification> listAll() { return repository.findAll().stream().sorted(Comparator.comparing(Notification::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))).toList(); }
  @Override public Notification create(User actor, Notification n) {

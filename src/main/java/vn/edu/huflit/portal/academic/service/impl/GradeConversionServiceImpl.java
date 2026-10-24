@@ -1,7 +1,7 @@
-package vn.edu.huflit.portal.service.impl;
+package vn.edu.huflit.portal.academic.service.impl;
 
 import org.springframework.stereotype.Service;
-import vn.edu.huflit.portal.service.GradeConversionService;
+import vn.edu.huflit.portal.academic.service.GradeConversionService;
 
 @Service
 public class GradeConversionServiceImpl implements GradeConversionService {

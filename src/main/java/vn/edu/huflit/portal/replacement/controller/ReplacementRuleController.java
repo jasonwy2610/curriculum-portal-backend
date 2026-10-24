@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.controller;
+package vn.edu.huflit.portal.replacement.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.huflit.portal.dto.response.ApiResponse;
 import vn.edu.huflit.portal.entity.ReplacementRule;
 import vn.edu.huflit.portal.entity.User;
-import vn.edu.huflit.portal.service.ReplacementRuleService;
+import vn.edu.huflit.portal.replacement.service.ReplacementRuleService;
 import java.util.List;
 
 @RestController

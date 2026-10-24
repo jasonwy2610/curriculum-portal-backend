@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.service;
+package vn.edu.huflit.portal.notification.service;
 import vn.edu.huflit.portal.entity.Notification;
 import vn.edu.huflit.portal.entity.User;
 import java.util.List;
@@ -7,6 +7,7 @@ public interface NotificationService {
  List<Map<String,Object>> listForStudent(User user);
  Map<String,Object> detailForStudent(User user, String id);
  Map<String,Object> markRead(User user, String id);
+ Map<String,Object> markUnread(User user, String id);
  List<Notification> listAll();
  Notification create(User actor, Notification n);
 }

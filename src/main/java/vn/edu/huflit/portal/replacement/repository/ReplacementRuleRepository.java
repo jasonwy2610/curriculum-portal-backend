@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.repository;
+package vn.edu.huflit.portal.replacement.repository;
 
 import org.bson.types.ObjectId;
 import org.springframework.data.mongodb.repository.MongoRepository;

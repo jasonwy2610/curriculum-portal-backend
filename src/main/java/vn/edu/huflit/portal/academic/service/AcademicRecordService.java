@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.service;
+package vn.edu.huflit.portal.academic.service;
 
 import org.bson.types.ObjectId;
 import vn.edu.huflit.portal.dto.request.AddAcademicAttemptRequest;

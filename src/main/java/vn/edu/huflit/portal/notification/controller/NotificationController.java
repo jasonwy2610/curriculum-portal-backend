@@ -1,4 +1,4 @@
-package vn.edu.huflit.portal.controller;
+package vn.edu.huflit.portal.notification.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.huflit.portal.dto.response.ApiResponse;
 import vn.edu.huflit.portal.entity.Notification;
 import vn.edu.huflit.portal.entity.User;
-import vn.edu.huflit.portal.service.NotificationService;
+import vn.edu.huflit.portal.notification.service.NotificationService;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +27,10 @@ public class NotificationController {
     @PatchMapping("/api/v1/student/notifications/{id}/read")
     public ResponseEntity<ApiResponse<Map<String,Object>>> markRead(@AuthenticationPrincipal User user, @PathVariable String id) {
         return ResponseEntity.ok(ApiResponse.ok("Đã đánh dấu thông báo đã đọc", service.markRead(user, id)));
+    }
+    @PatchMapping("/api/v1/student/notifications/{id}/unread")
+    public ResponseEntity<ApiResponse<Map<String,Object>>> markUnread(@AuthenticationPrincipal User user, @PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã đánh dấu thông báo chưa đọc", service.markUnread(user, id)));
     }
     @GetMapping("/api/v1/admin/notifications")
     public ResponseEntity<ApiResponse<List<Notification>>> adminList() {

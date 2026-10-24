@@ -1,16 +1,14 @@
-package vn.edu.huflit.portal.controller;
+package vn.edu.huflit.portal.academic.controller;
 
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.bson.types.ObjectId;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import vn.edu.huflit.portal.dto.request.AddAcademicAttemptRequest;
 import vn.edu.huflit.portal.dto.response.AcademicRecordResponse;
 import vn.edu.huflit.portal.dto.response.ApiResponse;
 import vn.edu.huflit.portal.entity.User;
-import vn.edu.huflit.portal.service.AcademicRecordService;
+import vn.edu.huflit.portal.academic.service.AcademicRecordService;
 
 import java.util.List;
 
