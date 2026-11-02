@@ -8,3 +8,199 @@
 @media(max-width:900px){.group-progress-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.row-actions{gap:7px}}
 @media(max-width:600px){.group-progress-grid{grid-template-columns:1fr}.structure-actions button{width:100%;justify-content:center}.lookup-toolbar>*{width:100%}}
 .structure-list{display:grid;gap:8px}.structure-item{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid #e9eef5;background:#fbfcfe;border-radius:8px;padding:10px 12px;font-size:10px;color:#5b6f87}.structure-item b{color:#315f93}.structure-item small{display:block;color:#9aa5b4;margin-top:4px;font-size:8px}
+
+
+/* --------------------------------------------------------------------------
+   Shared interaction system: visible, tactile buttons and one global toast UI
+   -------------------------------------------------------------------------- */
+button {
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease,
+              box-shadow .18s ease, transform .18s ease;
+}
+button:focus-visible {
+  outline: 3px solid rgba(57, 119, 189, .28);
+  outline-offset: 2px;
+}
+.primary, .outline {
+  min-height: 42px;
+  padding: 10px 17px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .05px;
+  gap: 9px;
+  box-shadow: 0 2px 5px rgba(20, 48, 83, .07);
+}
+.primary {
+  background: linear-gradient(180deg, #2d6fb2 0%, #225b98 100%);
+  border: 1px solid #225b98;
+  color: #fff;
+}
+.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #245f9e 0%, #174a80 100%);
+  box-shadow: 0 5px 13px rgba(34, 91, 152, .2);
+  transform: translateY(-1px);
+}
+.primary:active:not(:disabled), .outline:active:not(:disabled) { transform: translateY(0) scale(.985); }
+.outline {
+  color: #315a86;
+  border: 1px solid #cbd9e9;
+  background: linear-gradient(180deg, #fff 0%, #f8fafd 100%);
+}
+.outline:hover:not(:disabled) {
+  color: #174a80;
+  border-color: #8eafd2;
+  background: #edf4fc;
+  box-shadow: 0 4px 11px rgba(35, 79, 129, .09);
+}
+.primary:disabled, .outline:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+.full { min-height: 44px; }
+.text-btn {
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid #dce6f1;
+  border-radius: 9px;
+  background: #f8fafd;
+  color: #315f94;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(20,48,83,.04);
+}
+.text-btn:hover {
+  color: #174a80;
+  background: #edf4fc;
+  border-color: #b8cde4;
+}
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #dfe7f0;
+  background: #fff;
+  color: #476482;
+  border-radius: 11px;
+  box-shadow: 0 2px 5px rgba(20,48,83,.05);
+}
+.icon-btn:hover {
+  color: #1d5792;
+  border-color: #bfd1e5;
+  background: #f0f6fd;
+  box-shadow: 0 4px 10px rgba(20,48,83,.09);
+}
+.nav-item {
+  min-height: 46px;
+  font-size: 12px;
+  border-radius: 11px;
+}
+.quick-actions button {
+  min-height: 132px;
+  border-radius: 13px;
+  padding: 19px 16px;
+  box-shadow: 0 2px 7px rgba(20,48,83,.035);
+}
+.quick-actions button:hover {
+  border-color: #b7cde5;
+  background: #f7faff;
+  box-shadow: 0 7px 17px rgba(30,75,128,.09);
+  transform: translateY(-2px);
+}
+.row-actions .text-btn { min-width: 68px; }
+.danger-text {
+  color: #b94343;
+  border-color: #f0d3d3;
+  background: #fffafa;
+}
+.danger-text:hover { color: #a32626; background: #fff0f0; border-color: #e7b7b7; }
+
+.toast-viewport {
+  position: fixed;
+  z-index: 10000;
+  top: 20px;
+  right: 22px;
+  width: min(410px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  pointer-events: none;
+}
+.toast-card {
+  --toast-accent: #3977bd;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 42px 17px 15px;
+  min-height: 76px;
+  overflow: hidden;
+  border: 1px solid #e1e8f0;
+  border-left: 4px solid var(--toast-accent);
+  border-radius: 13px;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 12px 35px rgba(21,43,70,.17);
+  color: #20364f;
+  pointer-events: auto;
+  animation: toast-enter .24s ease-out both;
+}
+.toast-symbol {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--toast-accent) 12%, white);
+  color: var(--toast-accent);
+}
+.toast-symbol svg { width: 19px; height: 19px; }
+.toast-copy { min-width: 0; flex: 1; padding-top: 1px; }
+.toast-copy b { display: block; font-size: 12px; line-height: 1.5; color: #1e334d; }
+.toast-copy p { margin: 4px 0 0; font-size: 11px; line-height: 1.55; color: #687a90; overflow-wrap: anywhere; }
+.toast-close {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 27px;
+  height: 27px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8b99aa;
+  font-size: 20px;
+  line-height: 1;
+}
+.toast-close:hover { background: #f0f3f7; color: #334a64; }
+.toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--toast-accent);
+  transform-origin: left;
+  animation: toast-countdown var(--toast-duration, 3.5s) linear forwards;
+}
+.toast-success { --toast-accent: #239568; --toast-duration: 3.5s; }
+.toast-error { --toast-accent: #d34d4d; --toast-duration: 6.5s; }
+.toast-warning { --toast-accent: #c58a2b; --toast-duration: 5s; }
+.toast-info { --toast-accent: #3977bd; --toast-duration: 4s; }
+.toast-success .toast-progress { animation-duration: 3.5s; }
+.toast-error .toast-progress { animation-duration: 6.5s; }
+.toast-warning .toast-progress { animation-duration: 5s; }
+.toast-info .toast-progress { animation-duration: 4s; }
+@keyframes toast-enter {
+  from { opacity: 0; transform: translate3d(24px,-5px,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+@keyframes toast-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 640px) {
+  .toast-viewport { top: 10px; right: 10px; width: calc(100vw - 20px); }
+  .primary, .outline { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
