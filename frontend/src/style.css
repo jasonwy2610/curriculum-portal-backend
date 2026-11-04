@@ -204,3 +204,19 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Admin student directory: paginated, searchable and keyboard-accessible. */
+.student-directory { margin-bottom: 20px; padding: 20px; }
+.student-directory .toolbar { display:flex; gap:12px; align-items:center; margin:12px 0; }
+.student-directory .searchbox { flex:1; min-width:200px; }
+.directory-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(265px,1fr)); gap:9px; }
+.directory-person { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border:1px solid #dce6f1; border-radius:12px; background:#fff; color:#173657; text-align:left; cursor:pointer; }
+.directory-person:hover,.directory-person.selected { border-color:#3175bd; background:#edf5ff; }
+.directory-person span { display:flex; flex-direction:column; min-width:0; gap:5px; }
+.directory-person small { color:#60748d; overflow-wrap:anywhere; font-size:12px; }
+.directory-pagination { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:14px; }
+.directory-pagination .outline { padding:8px 12px; min-height:34px; }
+.directory-pagination button:disabled { opacity:.45; cursor:not-allowed; }
+.directory-note { color:#667b95; padding:16px 4px; }
+.lookup-error { color:#ad3030; padding:10px 12px; background:#fff0f0; border-radius:8px; }
+@media(max-width:680px){.student-directory .toolbar{flex-wrap:wrap}.student-directory .searchbox{width:100%}.directory-pagination{flex-wrap:wrap}}
