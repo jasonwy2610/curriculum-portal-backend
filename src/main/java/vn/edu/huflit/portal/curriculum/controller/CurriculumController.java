@@ -20,7 +20,34 @@ import java.util.List;
 public class CurriculumController {
 
     private final CurriculumService curriculumService;
+    private final vn.edu.huflit.portal.curriculum.service.CurriculumPublicationService publicationService;
     private final ChangeLogService changeLogService;
+    private final vn.edu.huflit.portal.curriculum.service.CurriculumRequirementValidationService requirementValidationService;
+
+
+    /** Configure credit requirement groups while the curriculum is still a draft. */
+    @PutMapping("/{id}/requirement-groups")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<CurriculumResponse>> configureRequirementGroups(
+            @PathVariable String id,
+            @RequestBody List<vn.edu.huflit.portal.curriculum.model.Curriculum.RequirementGroupItem> groups) {
+        return ResponseEntity.ok(ApiResponse.ok(CurriculumResponse.fromEntity(publicationService.configureGroups(id, groups))));
+    }
+
+    /** Strict validation followed by a conditional status transition to ACTIVE. */
+    @PostMapping("/{id}/publish")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<CurriculumResponse>> publish(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(CurriculumResponse.fromEntity(publicationService.publish(id))));
+    }
+
+    /** Read-only preview: strict publish validation; no database changes. */
+    @GetMapping("/{id}/validation")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<vn.edu.huflit.portal.curriculum.service.CurriculumRequirementValidationService.ValidationResult>> validateRequirements(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(requirementValidationService.validate(id)));
+    }
+
 
     /**
      * F04 & F39: Danh sách & tìm kiếm nâng cao CTĐT.

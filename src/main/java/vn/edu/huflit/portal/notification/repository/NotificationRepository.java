@@ -10,4 +10,5 @@ import java.util.List;
 @Repository
 public interface NotificationRepository extends MongoRepository<Notification, ObjectId> {
     List<Notification> findByRecipientIdsContainingOrderByCreatedAtDesc(ObjectId studentId);
+    boolean existsByReplacementRuleId(ObjectId replacementRuleId);
 }

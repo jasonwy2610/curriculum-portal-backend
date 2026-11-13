@@ -9,6 +9,7 @@ import java.util.List;
 
 @Repository
 public interface ReplacementRuleRepository extends MongoRepository<ReplacementRule, ObjectId> {
+    List<ReplacementRule> findByRuleFamilyId(ObjectId ruleFamilyId);
     List<ReplacementRule> findByOldCourseCodesContaining(String oldCourseCode);
     List<ReplacementRule> findByMajorIdAndApplicableCohortsContaining(ObjectId majorId, String cohort);
 }

@@ -31,6 +31,7 @@ public class CreateCurriculumRequest {
     private Integer appliedYear;
 
     private Integer totalCredits;
+    private Integer mandatoryCredits;
     private String description;
     private String status; // "DRAFT" | "ACTIVE" | "ARCHIVED"
 

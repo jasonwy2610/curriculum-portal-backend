@@ -22,4 +22,6 @@ public class AddAcademicAttemptRequest {
     private Double score10;
 
     private Integer attemptNumber;
+
+    private java.util.Date completedAt;
 }

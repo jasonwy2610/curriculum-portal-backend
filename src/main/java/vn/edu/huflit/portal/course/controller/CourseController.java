@@ -38,6 +38,11 @@ public class CourseController {
         return ResponseEntity.ok(ApiResponse.ok(courses));
     }
 
+    @GetMapping("/departments")
+    public ResponseEntity<ApiResponse<List<String>>> getDepartments() {
+        return ResponseEntity.ok(ApiResponse.ok(courseService.getDepartments()));
+    }
+
     /**
      * F20: Xem chi tiết học phần theo ID.
      */

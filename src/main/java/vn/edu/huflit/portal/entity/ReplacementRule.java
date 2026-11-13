@@ -22,6 +22,14 @@ public class ReplacementRule {
     @Id
     private ObjectId id;
 
+    // A family identifies all versions of one logical replacement rule.
+    private ObjectId ruleFamilyId;
+    private ObjectId previousVersionId;
+    private Integer versionNumber;
+    private Date publishedAt;
+    private Date supersededAt; // metadata only; published rule content is immutable
+    private String lifecycleStatus; // DRAFT | PUBLISHED (legacy ACTIVE treated as published)
+
     private String ruleType; // "1-1" | "1-N" | "N-1"
     private List<String> oldCourseCodes;
     private List<String> newCourseCodes;

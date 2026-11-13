@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface CourseService {
 
+    List<String> getDepartments();
+
     // F19: Tìm kiếm & lọc danh sách học phần
     List<CourseResponse> getAllCourses(String keyword, String department, String status);
 

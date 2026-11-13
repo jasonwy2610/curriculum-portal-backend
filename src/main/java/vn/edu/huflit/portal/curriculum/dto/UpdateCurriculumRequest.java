@@ -20,6 +20,7 @@ public class UpdateCurriculumRequest {
     private String cohort;
     private Integer appliedYear;
     private Integer totalCredits;
+    private Integer mandatoryCredits;
     private String description;
     private String status;
 

@@ -7,5 +7,8 @@ public interface ReplacementRuleService {
     ReplacementRule getApplicable(User user, String id);
     List<ReplacementRule> findAll();
     ReplacementRule create(User actor, ReplacementRule rule);
-    ReplacementRule update(User actor, String id, ReplacementRule rule);
+    ReplacementRule update(User actor, String id, ReplacementRule rule); // draft only
+    ReplacementRule createRevision(User actor, String publishedId);
+    ReplacementRule publish(User actor, String draftId);
+    List<ReplacementRule> history(String id);
 }

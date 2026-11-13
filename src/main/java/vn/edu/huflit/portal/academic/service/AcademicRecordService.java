@@ -8,6 +8,8 @@ import java.util.List;
 
 public interface AcademicRecordService {
 
+    AcademicRecordResponse correctAttempt(ObjectId recordId, String attemptId, Double score10, String reason);
+
     List<AcademicRecordResponse> getMyAcademicRecords(ObjectId studentId);
 
     AcademicRecordResponse getMyAcademicRecord(

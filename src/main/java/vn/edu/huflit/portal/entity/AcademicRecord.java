@@ -38,6 +38,8 @@ public class AcademicRecord {
 
     @Data
     public static class AttemptItem {
+        private String attemptId; // stable identifier for audit and corrections
+        private Date completedAt; // actual completion date; null means historical eligibility unverified
         private String semesterCode;
         private Double score10;
         private String letterGrade;

@@ -54,7 +54,9 @@ public class AdminStudentLookupController {
                 "studentCode", u.getStudentCode() == null ? "" : u.getStudentCode(),
                 "fullName", u.getFullName() == null ? "" : u.getFullName(),
                 "email", u.getEmail() == null ? "" : u.getEmail(),
-                "cohort", u.getCohort() == null ? "" : u.getCohort()
+                "cohort", u.getCohort() == null ? "" : u.getCohort(),
+                "curriculumId", u.getCurriculumId() == null ? "" : u.getCurriculumId().toHexString(),
+                "majorId", u.getMajorId() == null ? "" : u.getMajorId().toHexString()
         )).toList();
         return ResponseEntity.ok(ApiResponse.ok(Map.of("items", items, "total", total, "page", safePage, "size", safeSize)));
     }

@@ -75,6 +75,14 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
+    public List<String> getDepartments() {
+        return mongoTemplate.query(Course.class).distinct("department").as(String.class).all()
+                .stream().filter(Objects::nonNull).map(String::trim).filter(v -> !v.isEmpty())
+                .distinct().sorted().collect(Collectors.toList());
+    }
+
+
+    @Override
     public CourseResponse getCourseById(String id) {
         Course course = findCourseEntityById(id);
         return CourseResponse.fromEntity(course);
@@ -109,7 +117,7 @@ public class CourseServiceImpl implements CourseService {
                 .theoryHours(request.getTheoryHours())
                 .practiceHours(request.getPracticeHours())
                 .description(request.getDescription())
-                .department(request.getDepartment())
+                .department(null)
                 .status(status)
                 .build();
 
@@ -160,10 +168,7 @@ public class CourseServiceImpl implements CourseService {
             course.setDescription(request.getDescription());
         }
 
-        if (request.getDepartment() != null && !Objects.equals(course.getDepartment(), request.getDepartment())) {
-            changes.add(new ChangeLog.FieldChangeItem("department", course.getDepartment(), request.getDepartment()));
-            course.setDepartment(request.getDepartment());
-        }
+        
 
         if (request.getStatus() != null && !request.getStatus().trim().isEmpty()) {
             String newStatus = request.getStatus().trim().toUpperCase();

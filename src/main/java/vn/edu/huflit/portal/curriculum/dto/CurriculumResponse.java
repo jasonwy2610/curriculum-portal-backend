@@ -23,6 +23,8 @@ public class CurriculumResponse {
     private String cohort;
     private Integer appliedYear;
     private Integer totalCredits;
+    private Integer mandatoryCredits;
+    private Integer electiveCreditsRequired;
     private String description;
     private String status;
     private Integer version;
@@ -38,6 +40,9 @@ public class CurriculumResponse {
 
     @Builder.Default
     private List<SemesterDto> semesters = new ArrayList<>();
+
+    @Builder.Default
+    private List<Curriculum.RequirementGroupItem> requirementGroups = new ArrayList<>();
 
     private String createdBy;
     private Date createdAt;
@@ -91,7 +96,9 @@ public class CurriculumResponse {
                 .majorId(entity.getMajorId() != null ? entity.getMajorId().toHexString() : null)
                 .cohort(entity.getCohort())
                 .appliedYear(entity.getAppliedYear())
-                .totalCredits(entity.getTotalCredits())
+                .totalCredits(entity.resolvedTotalCredits())
+                .mandatoryCredits(entity.resolvedMandatoryCredits())
+                .electiveCreditsRequired(entity.resolvedElectiveCreditsRequired())
                 .description(entity.getDescription())
                 .status(entity.getStatus())
                 .version(entity.getVersion())
@@ -101,6 +108,7 @@ public class CurriculumResponse {
                 .specializations(specs)
                 .knowledgeGroups(groups)
                 .semesters(semList)
+                .requirementGroups(entity.getRequirementGroups() == null ? new ArrayList<>() : entity.getRequirementGroups())
                 .createdBy(entity.getCreatedBy() != null ? entity.getCreatedBy().toHexString() : null)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())

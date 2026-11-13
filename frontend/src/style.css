@@ -220,3 +220,25 @@ button:focus-visible {
 .directory-note { color:#667b95; padding:16px 4px; }
 .lookup-error { color:#ad3030; padding:10px 12px; background:#fff0f0; border-radius:8px; }
 @media(max-width:680px){.student-directory .toolbar{flex-wrap:wrap}.student-directory .searchbox{width:100%}.directory-pagination{flex-wrap:wrap}}
+
+/* Student curriculum progress and replacement details */
+.curriculum-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.curriculum-metrics>div{background:#fff;border:1px solid #e2eaf4;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.curriculum-metrics span{font-size:10px;color:#71849b}.curriculum-metrics b{font-size:21px;color:#1d5188}
+.semester-panel tr.curriculum-failed{background:#fff1f0}.semester-panel tr.curriculum-failed td:first-child{border-left:3px solid #d95454}
+.semester-panel tr.curriculum-not-studied{background:#f7f9fc}
+.semester-total-row{background:#eaf2fc;font-size:11px;color:#274d79}.semester-total-row td{padding:15px 12px!important}
+.replacement-info-btn{border:1px solid #a7c8e9;background:#e9f3ff;color:#2369a6;border-radius:50%;width:28px;height:28px;font-size:19px;font-weight:700;display:inline-grid;place-items:center}
+.replacement-info-btn:hover{background:#cfe6ff}.replacement-success{color:#247e55!important;font-weight:700}
+.replacement-dialog{max-width:620px}.replacement-rule-detail{border-top:1px solid #e8eef6;padding:12px 0;font-size:12px;line-height:1.7;color:#425a75}
+.replacement-rule-detail ul{padding-left:22px}.replacement-rule-detail li{margin:5px 0}
+.replacement-guidance{padding:12px;background:#eaf4ff;border-radius:9px;color:#245b95}
+@media(max-width:850px){.curriculum-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.curriculum-credit-note{margin:12px 0 20px;padding:13px 17px;border:1px solid #d9e6f6;border-radius:12px;background:#f2f7ff;color:#375476;font-size:13px;line-height:1.7}.group-progress-card small{display:block;margin-top:7px;line-height:1.45}.group-progress-card>div:first-child span{font-size:11px;color:#8294aa}
+
+.huf-group{border-top:1px solid #e7edf5}.huf-group-title{padding:14px 22px;background:#f4f7fb;display:flex;justify-content:space-between;gap:12px;color:#274c75;font-size:12px}.huf-group-title span{color:#8492a4;font-size:10px}.huf-elective-note{margin:0;padding:12px 22px;background:#fffaf0;color:#886b37;font-size:11px}.huf-semester-total{padding:16px 22px;background:#eaf2fc;color:#315b87;font-size:11px;font-weight:700}.huf-record-filters{padding:22px}.huf-filters{display:flex;gap:15px;flex-wrap:wrap}.huf-filters label{display:flex;flex:1;min-width:165px;flex-direction:column;gap:8px;font-size:11px;color:#566f8b;font-weight:700}.huf-filters select{border:1px solid #dce5ef;border-radius:8px;padding:10px;background:white;color:#294666}.huf-results{padding:0;overflow:hidden}.huf-result-term h3{margin:0;background:#eaf2fc;color:#2c5d91;font-size:12px;padding:15px 20px}.huf-result-term+.huf-result-term{border-top:12px solid #f4f7fb}.huf-result-note{margin:0;padding:13px 20px;background:#f9f5ed;color:#786a53;font-size:10px}
+
+.huf-specializations{padding:22px}.huf-specialization-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-top:16px}.huf-specialization-form .field-label{min-width:175px;flex:1}.huf-specialization-form button{height:39px}.huf-detail-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;background:#f4f8fc;border-radius:10px;padding:12px;margin:12px 0}.form-error{color:#b42318;font-size:12px;margin:12px 0}
+
+.huf-credit-plan{padding:16px;border:1px solid #dce6f3;background:#f6f9ff;border-radius:12px}.huf-credit-plan p,.huf-credit-plan small{color:#647b98;font-size:11px;line-height:1.6}.huf-credit-plan .form-grid{margin-top:12px}

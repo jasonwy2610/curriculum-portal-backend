@@ -12,6 +12,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
+import java.util.List;
 
 @Data
 @Builder
@@ -28,6 +29,7 @@ public class Major {
     private String name;
     private String description;
     private String status; // "ACTIVE" | "INACTIVE"
+    private List<Specialization> specializations;
 
     @CreatedDate
     private Date createdAt;

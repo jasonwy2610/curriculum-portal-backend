@@ -35,6 +35,21 @@ public class ReplacementRuleController {
         return ResponseEntity.ok(ApiResponse.ok("Tạo quy tắc thay thế thành công", service.create(user, rule)));
     }
 
+    @GetMapping("/api/v1/admin/replacement-rules/{id}/history")
+    public ResponseEntity<ApiResponse<List<ReplacementRule>>> history(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(service.history(id)));
+    }
+
+    @PostMapping("/api/v1/admin/replacement-rules/{id}/revisions")
+    public ResponseEntity<ApiResponse<ReplacementRule>> revise(@AuthenticationPrincipal User user, @PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(service.createRevision(user, id)));
+    }
+
+    @PostMapping("/api/v1/admin/replacement-rules/{id}/publish")
+    public ResponseEntity<ApiResponse<ReplacementRule>> publish(@AuthenticationPrincipal User user, @PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(service.publish(user, id)));
+    }
+
     @PutMapping("/api/v1/admin/replacement-rules/{id}")
     public ResponseEntity<ApiResponse<ReplacementRule>> update(@AuthenticationPrincipal User user, @PathVariable String id, @RequestBody ReplacementRule rule) {
         return ResponseEntity.ok(ApiResponse.ok("Cập nhật quy tắc thay thế thành công", service.update(user, id, rule)));

@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 import vn.edu.huflit.portal.major.model.Major;
 
 import java.util.Date;
+import java.util.List;
+import vn.edu.huflit.portal.major.model.Specialization;
 
 @Data
 @Builder
@@ -18,6 +20,7 @@ public class MajorResponse {
     private String name;
     private String description;
     private String status;
+    private List<Specialization> specializations;
     private Date createdAt;
     private Date updatedAt;
 
@@ -31,6 +34,7 @@ public class MajorResponse {
                 .name(major.getName())
                 .description(major.getDescription())
                 .status(major.getStatus())
+                .specializations(major.getSpecializations())
                 .createdAt(major.getCreatedAt())
                 .updatedAt(major.getUpdatedAt())
                 .build();

@@ -38,6 +38,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     private final ChangeLogService changeLogService;
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final CurriculumCreditPlanService creditPlanService;
 
     @Override
     public List<CurriculumResponse> getAllCurriculums(String majorId, String cohort, Integer appliedYear, String status,
@@ -130,13 +131,14 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         String status = (request.getStatus() != null && !request.getStatus().trim().isEmpty())
                 ? request.getStatus().trim().toUpperCase()
-                : "ACTIVE";
+                : "DRAFT";
 
         String timing = (request.getSpecializationSelectionTiming() != null
                 && !request.getSpecializationSelectionTiming().trim().isEmpty())
                         ? request.getSpecializationSelectionTiming().trim().toUpperCase()
                         : "LATER";
 
+        if (!"DRAFT".equals(status)) throw new IllegalArgumentException("CTDT moi phai la DRAFT; su dung API publish de cong bo");
         validateSpecializationTiming(timing, request.getSpecializationSelectionSemester());
 
         // Chuyển đổi cấu trúc lồng nhau (nested structures)
@@ -217,6 +219,8 @@ public class CurriculumServiceImpl implements CurriculumService {
                 ? request.getTotalCredits()
                 : computedCredits;
 
+        validateCreditPlan(totalCredits, request.getMandatoryCredits(), status);
+
         Curriculum curriculum = Curriculum.builder()
                 .curriculumCode(code)
                 .curriculumName(request.getCurriculumName().trim())
@@ -224,6 +228,8 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .cohort(request.getCohort().trim())
                 .appliedYear(request.getAppliedYear())
                 .totalCredits(totalCredits)
+                .mandatoryCredits(request.getMandatoryCredits())
+                .electiveCreditsRequired(request.getMandatoryCredits()==null?null:totalCredits-request.getMandatoryCredits())
                 .description(request.getDescription())
                 .status(status)
                 .version(1)
@@ -236,6 +242,7 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .createdBy(getCurrentUserId())
                 .build();
 
+        if (request.getMandatoryCredits() != null) curriculum.applyCreditPlan(totalCredits, request.getMandatoryCredits());
         Curriculum saved = curriculumRepository.save(curriculum);
 
         // F41: Ghi nhận vết kiểm toán khi tạo mới CTĐT (action = CREATE)
@@ -254,6 +261,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse updateCurriculum(String id, UpdateCurriculumRequest request) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         List<ChangeLog.FieldChangeItem> changes = new ArrayList<>();
 
         if (request.getCurriculumName() != null && !request.getCurriculumName().trim().isEmpty()) {
@@ -293,9 +301,24 @@ public class CurriculumServiceImpl implements CurriculumService {
             curriculum.setAppliedYear(request.getAppliedYear());
         }
 
-        if (request.getTotalCredits() != null && !Objects.equals(curriculum.getTotalCredits(), request.getTotalCredits())) {
-            changes.add(new ChangeLog.FieldChangeItem("totalCredits", curriculum.getTotalCredits(), request.getTotalCredits()));
-            curriculum.setTotalCredits(request.getTotalCredits());
+        // Đồng bộ tuyệt đối hai vị trí lưu chỉ tiêu: root và creditRequirements.
+        // Không so sánh với root đơn lẻ vì bản ghi cũ có thể có requiredTotal khác root.
+        Integer plannedTotal = request.getTotalCredits() != null
+                ? request.getTotalCredits() : curriculum.resolvedTotalCredits();
+        Integer plannedMandatory = request.getMandatoryCredits() != null
+                ? request.getMandatoryCredits() : curriculum.resolvedMandatoryCredits();
+        String plannedStatus = request.getStatus() != null ? request.getStatus() : curriculum.getStatus();
+        validateCreditPlan(plannedTotal, plannedMandatory, plannedStatus);
+        if (!Objects.equals(curriculum.resolvedTotalCredits(), plannedTotal)) {
+            changes.add(new ChangeLog.FieldChangeItem("totalCredits", curriculum.resolvedTotalCredits(), plannedTotal));
+        }
+        if (plannedMandatory != null) {
+            curriculum.applyCreditPlan(plannedTotal, plannedMandatory);
+        } else {
+            curriculum.setTotalCredits(plannedTotal);
+            if (curriculum.getCreditRequirements() != null) {
+                curriculum.getCreditRequirements().setRequiredTotal(plannedTotal);
+            }
         }
 
         if (request.getDescription() != null && !Objects.equals(curriculum.getDescription(), request.getDescription())) {
@@ -305,6 +328,7 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         if (request.getStatus() != null && !request.getStatus().trim().isEmpty()) {
             String newStatus = request.getStatus().trim().toUpperCase();
+            if (!"DRAFT".equals(newStatus)) throw new IllegalArgumentException("Chi API publish duoc chuyen CTDT sang ACTIVE");
             if (!Objects.equals(curriculum.getStatus(), newStatus)) {
                 changes.add(new ChangeLog.FieldChangeItem("status", curriculum.getStatus(), newStatus));
                 curriculum.setStatus(newStatus);
@@ -451,8 +475,9 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         String status = (request.getStatus() != null && !request.getStatus().trim().isEmpty())
                 ? request.getStatus().trim().toUpperCase()
-                : "ACTIVE";
+                : "DRAFT";
 
+        if (!"DRAFT".equals(status)) throw new IllegalArgumentException("Ban sao CTDT phai la DRAFT");
         String description = request.getDescription() != null
                 ? request.getDescription()
                 : "Bản sao từ " + source.getCurriculumCode();
@@ -513,7 +538,9 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .majorId(source.getMajorId())
                 .cohort(targetCohort)
                 .appliedYear(targetAppliedYear)
-                .totalCredits(source.getTotalCredits())
+                .totalCredits(source.resolvedTotalCredits())
+                .mandatoryCredits(source.resolvedMandatoryCredits())
+                .electiveCreditsRequired(source.resolvedElectiveCreditsRequired())
                 .description(description)
                 .status(status)
                 .version(1)
@@ -523,9 +550,36 @@ public class CurriculumServiceImpl implements CurriculumService {
                 .specializations(clonedSpecs)
                 .knowledgeGroups(clonedGroups)
                 .semesters(clonedSemesters)
+                .requirementGroups(source.getRequirementGroups() == null ? new ArrayList<>() :
+                        source.getRequirementGroups().stream().map(g -> Curriculum.RequirementGroupItem.builder()
+                                .groupCode(g.getGroupCode()).groupName(g.getGroupName()).kind(g.getKind())
+                                .specializationCodes(g.getSpecializationCodes() == null ? new ArrayList<>() : new ArrayList<>(g.getSpecializationCodes()))
+                                .requiredCredits(g.getRequiredCredits())
+                                .eligibleCourseCodes(g.getEligibleCourseCodes() == null ? new ArrayList<>() : new ArrayList<>(g.getEligibleCourseCodes()))
+                                .completionOptions(g.getCompletionOptions() == null ? new ArrayList<>() : g.getCompletionOptions().stream()
+                                        .map(o -> Curriculum.CompletionOptionItem.builder().optionCode(o.getOptionCode())
+                                                .courseCodes(o.getCourseCodes() == null ? new ArrayList<>() : new ArrayList<>(o.getCourseCodes())).build()).toList())
+                                .countsTowardGraduation(g.getCountsTowardGraduation()).countsTowardGpa(g.getCountsTowardGpa())
+                                .build()).toList())
                 .createdBy(getCurrentUserId())
                 .build();
 
+        // Deep clone cả cấu hình phân nhóm; tránh mất free/specialization/graduation credits.
+        if (source.getCreditRequirements() != null) {
+            Curriculum.CreditRequirements old = source.getCreditRequirements();
+            clonedCurriculum.setCreditRequirements(Curriculum.CreditRequirements.builder()
+                    .requiredTotal(source.resolvedTotalCredits())
+                    .mandatoryCredits(source.resolvedMandatoryCredits())
+                    .electiveCreditsRequired(source.resolvedElectiveCreditsRequired())
+                    .freeElectiveCredits(old.getFreeElectiveCredits())
+                    .specializationElectiveCredits(old.getSpecializationElectiveCredits())
+                    .graduationCredits(old.getGraduationCredits())
+                    .build());
+        }
+        if (clonedCurriculum.resolvedMandatoryCredits() != null) {
+            clonedCurriculum.applyCreditPlan(clonedCurriculum.resolvedTotalCredits(),
+                    clonedCurriculum.resolvedMandatoryCredits());
+        }
         Curriculum saved = curriculumRepository.save(clonedCurriculum);
 
         // F41: Ghi nhận vết kiểm toán khi Deep Clone CTĐT (action = CLONE)
@@ -565,6 +619,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse replaceKnowledgeGroups(String id, List<KnowledgeGroupDto> knowledgeGroups) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         if (knowledgeGroups == null) {
             knowledgeGroups = new ArrayList<>();
         }
@@ -618,6 +673,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse addKnowledgeGroup(String id, KnowledgeGroupDto dto) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         if (dto.getGroupCode() == null || dto.getGroupCode().trim().isEmpty()) {
             throw new RuntimeException("Mã nhóm kiến thức không được để trống");
         }
@@ -653,6 +709,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse updateKnowledgeGroup(String id, String groupCode, UpdateKnowledgeGroupRequest request) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         if (groupCode == null || groupCode.trim().isEmpty()) {
             throw new RuntimeException("Mã nhóm kiến thức không được để trống");
         }
@@ -689,6 +746,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse deleteKnowledgeGroup(String id, String groupCode) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         if (groupCode == null || groupCode.trim().isEmpty()) {
             throw new RuntimeException("Mã nhóm kiến thức không được để trống");
         }
@@ -726,6 +784,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse configureSpecializations(String id, ConfigureSpecializationsRequest request) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
 
         String timing = request.getSpecializationSelectionTiming();
         Integer semester = request.getSpecializationSelectionSemester();
@@ -776,6 +835,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse addSpecialization(String id, SpecializationDto dto) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         if (dto.getCode() == null || dto.getCode().trim().isEmpty()) {
             throw new RuntimeException("Mã chuyên ngành không được để trống");
         }
@@ -810,6 +870,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse deleteSpecialization(String id, String specCode) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         if (specCode == null || specCode.trim().isEmpty()) {
             throw new RuntimeException("Mã chuyên ngành không được để trống");
         }
@@ -850,6 +911,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse addCourseToCurriculum(String id, AddCurriculumCourseRequest request) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
 
         String courseCode = request.getCourseCode().trim();
 
@@ -973,6 +1035,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse updateCourseInCurriculum(String id, String courseCode, UpdateCurriculumCourseRequest request) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         String targetCode = courseCode.trim();
 
         Curriculum.SemesterItem currentSemester = null;
@@ -1098,6 +1161,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     @Override
     public CurriculumResponse deleteCourseFromCurriculum(String id, String courseCode) {
         Curriculum curriculum = findCurriculumEntityById(id);
+        requireDraft(curriculum);
         String targetCode = courseCode.trim();
 
         boolean removed = false;
@@ -1186,17 +1250,26 @@ public class CurriculumServiceImpl implements CurriculumService {
         }
     }
 
+    // Khong ghi de chi tieu CTDT bang tong danh muc mon (bao gom tat ca lua chon).
+    private void requireDraft(Curriculum curriculum) {
+        if (!"DRAFT".equalsIgnoreCase(curriculum.getStatus()))
+            throw new IllegalStateException("Chi CTDT DRAFT duoc thay doi cau truc; tao phien ban moi de dieu chinh");
+    }
+
     private void recalculateTotalCredits(Curriculum curriculum) {
-        if (curriculum.getSemesters() == null) {
-            curriculum.setTotalCredits(0);
+        // Incomplete drafts remain editable; never overwrite their plan with catalogue totals.
+        // A complete, consistent requirement structure is the source of truth.
+        creditPlanService.calculate(curriculum).ifPresent(plan ->
+            curriculum.applyCreditPlan(plan.total(), plan.mandatory()));
+    }
+
+    private void validateCreditPlan(Integer total, Integer mandatory, String status) {
+        if (total == null || total <= 0) throw new IllegalArgumentException("Tổng tín chỉ CTĐT phải lớn hơn 0");
+        if (mandatory == null) {
+            if ("ACTIVE".equalsIgnoreCase(status)) throw new IllegalArgumentException("CTĐT đang áp dụng phải có chỉ tiêu tín chỉ bắt buộc");
             return;
         }
-        int sum = curriculum.getSemesters().stream()
-                .filter(s -> s.getCourses() != null)
-                .flatMap(s -> s.getCourses().stream())
-                .mapToInt(c -> c.getCredits() != null ? c.getCredits() : 0)
-                .sum();
-        curriculum.setTotalCredits(sum);
+        if (mandatory < 0 || mandatory > total) throw new IllegalArgumentException("Tín chỉ bắt buộc phải từ 0 đến tổng tín chỉ CTĐT");
     }
 
     private Curriculum findCurriculumEntityById(String id) {

@@ -23,6 +23,8 @@ public class AcademicRecordResponse {
     @Data
     @Builder
     public static class AttemptResponse {
+        private String attemptId;
+        private java.util.Date completedAt;
         private String semesterCode;
         private Double score10;
         private String letterGrade;
