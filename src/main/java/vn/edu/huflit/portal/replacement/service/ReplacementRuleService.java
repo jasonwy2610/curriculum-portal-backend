@@ -1,6 +1,7 @@
 package vn.edu.huflit.portal.replacement.service;
 import vn.edu.huflit.portal.entity.ReplacementRule;
 import vn.edu.huflit.portal.entity.User;
+import java.util.Date;
 import java.util.List;
 public interface ReplacementRuleService {
     List<ReplacementRule> findApplicable(User user);
@@ -9,6 +10,8 @@ public interface ReplacementRuleService {
     ReplacementRule create(User actor, ReplacementRule rule);
     ReplacementRule update(User actor, String id, ReplacementRule rule); // draft only
     ReplacementRule createRevision(User actor, String publishedId);
+    ReplacementRule validateForPublication(String draftId);
     ReplacementRule publish(User actor, String draftId);
+    ReplacementRule retire(User actor, String publishedId, Date endsAt, String reason);
     List<ReplacementRule> history(String id);
 }

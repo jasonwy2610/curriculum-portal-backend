@@ -11,22 +11,22 @@ import vn.edu.huflit.portal.curriculum.repository.CurriculumRepository;
 import vn.edu.huflit.portal.entity.AcademicRecord;
 import vn.edu.huflit.portal.entity.User;
 import vn.edu.huflit.portal.entity.ReplacementRule;
-import vn.edu.huflit.portal.replacement.repository.ReplacementRuleRepository;
+import vn.edu.huflit.portal.replacement.service.ReplacementApplicability;
+import org.springframework.dao.DuplicateKeyException;
+import java.time.Instant;
 import vn.edu.huflit.portal.academic.service.GradeConversionService;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** P0.3 foundation: deterministic group-based credit recognition.
- * Replacement mappings and GPA are deliberately NOT inferred by this first stage.
- */
+/** Evaluates curriculum requirements, grades and replacement evidence. */
 @Service
 @RequiredArgsConstructor
 public class CurriculumEvaluationService {
     private final CurriculumRepository curricula;
     private final CourseRepository courses;
     private final AcademicRecordRepository records;
-    private final ReplacementRuleRepository replacementRules;
+    private final ReplacementApplicability applicability;
     private final GradeConversionService gradeConversion;
     private final RecognitionEvidenceRepository evidenceRepository;
 
@@ -34,7 +34,14 @@ public class CurriculumEvaluationService {
     public Map<String, Object> evaluate(User student) { return evaluateInternal(student, false); }
 
     /** Official evaluation records newly verified replacement entitlements. */
-    public Map<String, Object> evaluateOfficial(User student) { return evaluateInternal(student, true); }
+    public Map<String, Object> evaluateOfficial(User student) {
+        try {
+            return evaluateInternal(student, true);
+        } catch (DuplicateKeyException concurrentRecognition) {
+            // Reload the winning snapshot before calculating credits and GPA.
+            return evaluateInternal(student, true);
+        }
+    }
 
     private Map<String, Object> evaluateInternal(User student, boolean persistEvidence) {
         if (student == null || student.getCurriculumId() == null)
@@ -55,8 +62,8 @@ public class CurriculumEvaluationService {
         // A pass/fail course can be completed without a numeric grade. Never
         // manufacture a GPA score for it.
         Set<String> nonNumericPassed = new HashSet<>();
-        Map<String, Date> bestCompletedAt = new HashMap<>();
-        Map<String, String> bestAttemptId = new HashMap<>();
+        Map<String, List<AcademicRecord.AttemptItem>> passingAttempts = new HashMap<>();
+        Instant asOf = Instant.now();
         for (AcademicRecord record : studentRecords) {
             if (record.getCourseCode() != null && "PASSED".equalsIgnoreCase(record.getStatus()))
                 nonNumericPassed.add(record.getCourseCode());
@@ -65,11 +72,9 @@ public class CurriculumEvaluationService {
                 if (attempt.getScore10() == null) continue;
                 if (!Double.isFinite(attempt.getScore10()) || attempt.getScore10() < 0 || attempt.getScore10() > 10) continue;
                 String code = record.getCourseCode();
-                Double previous = bestScore.get(code);
-                if (previous == null || attempt.getScore10() > previous) {
-                    bestScore.put(code, attempt.getScore10());
-                    bestCompletedAt.put(code, attempt.getCompletedAt());
-                    bestAttemptId.put(code, attempt.getAttemptId());
+                bestScore.merge(code, attempt.getScore10(), Math::max);
+                if (attempt.getScore10() >= 4.0) {
+                    passingAttempts.computeIfAbsent(code, ignored -> new ArrayList<>()).add(attempt);
                 }
             }
         }
@@ -97,8 +102,10 @@ public class CurriculumEvaluationService {
         Map<String, List<String>> replacementForOld = new TreeMap<>();
         Map<String, Double> replacementGrade4ForOld = new HashMap<>();
         Set<String> claimedReplacementCourses = new HashSet<>();
+        Set<String> claimedAttemptIds = new HashSet<>();
         List<String> skippedComplexRules = new ArrayList<>();
         List<String> historyVerificationRequired = new ArrayList<>();
+        List<String> invalidHistoricalEvidenceIds = new ArrayList<>();
         List<Map<String,Object>> recognitionEvidence = new ArrayList<>();
         List<RecognitionEvidence> historicalEvidence = evidenceRepository.findByStudentIdAndCurriculumId(
             student.getId(), curriculum.getId());
@@ -106,26 +113,38 @@ public class CurriculumEvaluationService {
         // must never silently inflate graduation progress. Validate the whole mapping
         // before consuming any of its courses (particularly for N-1 rules).
         Set<String> historicalOriginals = new HashSet<>();
-        Set<ObjectId> historicalRuleIds = new HashSet<>();
-        for (RecognitionEvidence item : historicalEvidence) {
+        Set<ObjectId> historicalRuleIds = new LinkedHashSet<>();
+        Set<ObjectId> recognizedFamilies = new HashSet<>();
+        for (RecognitionEvidence item : historicalEvidence.stream()
+                .sorted(Comparator.comparing(RecognitionEvidence::getRecognizedAt, Comparator.nullsLast(Date::compareTo))
+                    .thenComparing(RecognitionEvidence::getId, Comparator.nullsLast(ObjectId::compareTo))).toList()) {
+            if (historicalRuleIds.contains(item.getRuleId())) continue;
+            ObjectId family = item.getRuleFamilyId() == null ? item.getRuleId() : item.getRuleFamilyId();
             List<String> olds = unique(item.getOriginalCourseCodes());
             List<String> news = unique(item.getReplacementCourseCodes());
             String evidenceId = item.getId() == null ? "unknown" : item.getId().toHexString();
             if (olds.isEmpty() || news.isEmpty() || item.getRuleId() == null
-                || item.getGrade4() == null || !Double.isFinite(item.getGrade4())
-                || item.getGrade4() < 0 || item.getGrade4() > 4
+                || item.getGrade4() == null
                 || item.getAttemptIds() == null || !item.getAttemptIds().keySet().containsAll(news)
                 || news.stream().anyMatch(c -> item.getAttemptIds().get(c) == null
-                    || item.getAttemptIds().get(c).isBlank())
-                || olds.stream().anyMatch(news::contains)
-                || !historicalRuleIds.add(item.getRuleId())
-                || olds.stream().anyMatch(historicalOriginals::contains)
-                || news.stream().anyMatch(claimedReplacementCourses::contains)) {
+                    || item.getAttemptIds().get(c).isBlank())) {
                 historyVerificationRequired.add("EVIDENCE:" + evidenceId);
                 continue;
             }
+            Set<String> evidenceAttemptIds = news.stream().map(item.getAttemptIds()::get).collect(Collectors.toSet());
+            if (!Double.isFinite(item.getGrade4()) || item.getGrade4() < 0 || item.getGrade4() > 4
+                || evidenceAttemptIds.size() != news.size() || !Collections.disjoint(evidenceAttemptIds, claimedAttemptIds)
+                || olds.stream().anyMatch(news::contains)
+                || olds.stream().anyMatch(historicalOriginals::contains)
+                || news.stream().anyMatch(claimedReplacementCourses::contains)) {
+                invalidHistoricalEvidenceIds.add(evidenceId);
+                continue;
+            }
+            historicalRuleIds.add(item.getRuleId());
+            recognizedFamilies.add(family);
             historicalOriginals.addAll(olds);
             claimedReplacementCourses.addAll(news);
+            claimedAttemptIds.addAll(evidenceAttemptIds);
             for (String old : olds) {
                 // Direct completion always wins, but evidence remains unchanged.
                 if (bestScore.getOrDefault(old, -1.0) >= 4.0 || nonNumericPassed.contains(old)) continue;
@@ -133,115 +152,106 @@ public class CurriculumEvaluationService {
                 replacementGrade4ForOld.put(old, item.getGrade4());
             }
         }
-        List<ReplacementRule> scopedRules = replacementRules.findAll().stream()
-            .filter(r -> "ACTIVE".equals(r.getStatus()))
-            .filter(r -> "PUBLISHED".equals(r.getLifecycleStatus())
-                || (r.getLifecycleStatus() == null && "ACTIVE".equals(r.getStatus())))
-            .filter(r -> r.getEffectiveDate() != null && !r.getEffectiveDate().after(new Date()))
-            .filter(r -> r.getMajorId() == null || r.getMajorId().equals(student.getMajorId()))
-            .filter(r -> r.getApplicableCohorts() == null || r.getApplicableCohorts().isEmpty()
-                || r.getApplicableCohorts().contains(student.getCohort()))
-            .sorted(Comparator.comparing(ReplacementRule::getEffectiveDate)
-                .thenComparing(r -> r.getId() == null ? "" : r.getId().toHexString()))
-            .collect(Collectors.toList());
-        // Consider all published versions, newest first, but allow an older version
-        // when the newer one was not applicable at the student's completion date.
-        // A family may contribute at most one successful recognition.
-        Map<ObjectId, List<ReplacementRule>> versionsByFamily = new LinkedHashMap<>();
-        for (ReplacementRule rule : scopedRules) {
-            ObjectId family = rule.getRuleFamilyId() == null ? rule.getId() : rule.getRuleFamilyId();
-            if (family == null) continue;
-            versionsByFamily.computeIfAbsent(family, ignored -> new ArrayList<>()).add(rule);
+        Map<ObjectId, List<ReplacementApplicability.Window>> versionsByFamily = new LinkedHashMap<>();
+        for (var window : applicability.windows(student, curriculum, asOf)) {
+            ObjectId family = ReplacementApplicability.family(window.rule());
+            if (!recognizedFamilies.contains(family))
+                versionsByFamily.computeIfAbsent(family, ignored -> new ArrayList<>()).add(window);
         }
-        Comparator<ReplacementRule> newestFirst = Comparator
-            .comparing((ReplacementRule r) -> r.getVersionNumber() == null ? 1 : r.getVersionNumber())
-            .thenComparing(ReplacementRule::getEffectiveDate)
-            .thenComparing(r -> r.getId() == null ? "" : r.getId().toHexString())
-            .reversed();
-        for (List<ReplacementRule> familyVersions : versionsByFamily.values())
-            familyVersions.sort(newestFirst);
-        for (List<ReplacementRule> familyVersions : versionsByFamily.values()) {
+        Comparator<AcademicRecord.AttemptItem> strongestEvidence = Comparator
+            .comparing(AcademicRecord.AttemptItem::getScore10)
+            .thenComparing(AcademicRecord.AttemptItem::getCompletedAt)
+            .thenComparing(AcademicRecord.AttemptItem::getAttemptId);
+        Set<ObjectId> recognizedRuleIds = new LinkedHashSet<>(historicalRuleIds);
+        for (var familyVersions : versionsByFamily.entrySet()) {
             List<String> familyUnverified = new ArrayList<>();
             boolean familyRecognized = false;
-            for (ReplacementRule rule : familyVersions) {
-            List<String> olds = unique(rule.getOldCourseCodes());
-            List<String> news = unique(rule.getNewCourseCodes());
-            String ruleId = rule.getId() == null ? "unknown" : rule.getId().toHexString();
-            boolean shapeValid = ("1-1".equals(rule.getRuleType()) && olds.size() == 1 && news.size() == 1)
-                || ("1-N".equals(rule.getRuleType()) && olds.size() == 1 && news.size() > 1)
-                || ("N-1".equals(rule.getRuleType()) && olds.size() > 1 && news.size() == 1);
-            if (!shapeValid || olds.stream().anyMatch(news::contains)
-                || olds.stream().anyMatch(c -> !creditByCode.containsKey(c))
-                || news.stream().anyMatch(c -> !creditByCode.containsKey(c))) {
-                skippedComplexRules.add(ruleId);
-                continue;
-            }
-            // The old courses already passed are always recognized directly.
-            // N-1 is treated atomically: do not replace only a subset of its old requirements.
-            if (olds.stream().anyMatch(c -> bestScore.getOrDefault(c, -1.0) >= 4.0)
-                || olds.stream().anyMatch(nonNumericPassed::contains)
-                || olds.stream().anyMatch(historicalOriginals::contains)
-                || olds.stream().anyMatch(replacementForOld::containsKey)
-                || news.stream().anyMatch(claimedReplacementCourses::contains)
-                || news.stream().anyMatch(c -> bestScore.getOrDefault(c, -1.0) < 4.0)) continue;
-            // Publication must predate completion. Old data with no completedAt or
-            // no publishedAt cannot establish a historical entitlement.
-            boolean historicallyVerified = rule.getPublishedAt() != null
-                && news.stream().allMatch(c -> bestAttemptId.get(c) != null
-                    && !bestAttemptId.get(c).isBlank()
-                    && bestCompletedAt.get(c) != null
-                    && !bestCompletedAt.get(c).before(rule.getEffectiveDate())
-                    && !bestCompletedAt.get(c).before(rule.getPublishedAt()));
-            if (!historicallyVerified) {
-                familyUnverified.add(ruleId);
-                continue; // try an older published version if it is historically eligible
-            }
-            Map<String,Object> evidence = new LinkedHashMap<>();
-            evidence.put("ruleId", ruleId);
-            evidence.put("ruleFamilyId", rule.getRuleFamilyId() == null ? null : rule.getRuleFamilyId().toHexString());
-            evidence.put("versionNumber", rule.getVersionNumber());
-            evidence.put("oldCourseCodes", olds);
-            evidence.put("newCourseCodes", news);
-            evidence.put("effectiveDate", rule.getEffectiveDate());
-            evidence.put("publishedAt", rule.getPublishedAt());
-            evidence.put("attemptIds", news.stream().collect(Collectors.toMap(c -> c,
-                c -> bestAttemptId.get(c) == null ? "MISSING" : bestAttemptId.get(c))));
-            evidence.put("completedAt", news.stream().collect(Collectors.toMap(c -> c, bestCompletedAt::get)));
-            recognitionEvidence.add(evidence);
-            double points = news.stream().mapToDouble(c ->
-                gradeConversion.convert(bestScore.get(c)).score4() * creditByCode.get(c)).sum();
-            int totalCredits = news.stream().mapToInt(creditByCode::get).sum();
-            double representativeGrade4 = points / totalCredits;
-            RecognitionEvidence persisted = RecognitionEvidence.builder()
-                .studentId(student.getId()).curriculumId(curriculum.getId())
-                .ruleId(rule.getId()).ruleFamilyId(rule.getRuleFamilyId())
-                .versionNumber(rule.getVersionNumber()).originalCourseCodes(new ArrayList<>(olds))
-                .replacementCourseCodes(new ArrayList<>(news))
-                .attemptIds(new LinkedHashMap<>((Map<String,String>) evidence.get("attemptIds")))
-                .grade4(representativeGrade4).recognizedAt(new Date()).build();
-            // Append-only evidence. Unique rule/student/curriculum index avoids duplicate recognition.
-            boolean verifiedForCurrentEvaluation = true;
-            try {
-                if (persistEvidence) evidenceRepository.insert(persisted);
-            } catch (org.springframework.dao.DuplicateKeyException alreadyRecognized) {
-                // The winning write may contain different attempts or grades. Fail closed
-                // for this evaluation; a fresh request will read the persisted evidence.
-                historyVerificationRequired.add("CONCURRENT_EVIDENCE:" + ruleId);
-                verifiedForCurrentEvaluation = false;
-            }
-            if (verifiedForCurrentEvaluation) {
+            for (var window : familyVersions.getValue()) {
+                ReplacementRule rule = window.rule();
+                List<String> olds = unique(rule.getOldCourseCodes());
+                List<String> news = unique(rule.getNewCourseCodes());
+                String ruleId = rule.getId().toHexString();
+                boolean shapeValid = ("1-1".equals(rule.getRuleType()) && olds.size() == 1 && news.size() == 1)
+                    || ("1-N".equals(rule.getRuleType()) && olds.size() == 1 && news.size() > 1)
+                    || ("N-1".equals(rule.getRuleType()) && olds.size() > 1 && news.size() == 1);
+                if (!shapeValid || olds.stream().anyMatch(news::contains)
+                    || olds.stream().anyMatch(c -> !creditByCode.containsKey(c))
+                    || news.stream().anyMatch(c -> !creditByCode.containsKey(c))) {
+                    skippedComplexRules.add(ruleId);
+                    continue;
+                }
+                if (olds.stream().anyMatch(c -> bestScore.getOrDefault(c, -1.0) >= 4.0)
+                    || olds.stream().anyMatch(nonNumericPassed::contains)
+                    || olds.stream().anyMatch(historicalOriginals::contains)
+                    || olds.stream().anyMatch(replacementForOld::containsKey)
+                    || news.stream().anyMatch(claimedReplacementCourses::contains)
+                    || news.stream().anyMatch(c -> !passingAttempts.containsKey(c))) continue;
+
+                Map<String, AcademicRecord.AttemptItem> evidenceAttempts = new LinkedHashMap<>();
+                for (String code : news) {
+                    passingAttempts.get(code).stream()
+                        .filter(attempt -> attempt.getAttemptId() != null && !attempt.getAttemptId().isBlank()
+                            && !claimedAttemptIds.contains(attempt.getAttemptId())
+                            && attempt.getCompletedAt() != null
+                            && !attempt.getCompletedAt().toInstant().isAfter(asOf)
+                            && window.verifies(attempt.getCompletedAt().toInstant()))
+                        .max(strongestEvidence).ifPresent(attempt -> evidenceAttempts.put(code, attempt));
+                }
+                if (evidenceAttempts.size() != news.size()) {
+                    // Verify only if the missing data could make this entire rule applicable.
+                    boolean couldBeVerified = news.stream().filter(code -> !evidenceAttempts.containsKey(code))
+                        .allMatch(code -> passingAttempts.get(code).stream()
+                            .anyMatch(attempt -> needsHistoricalData(attempt, window, asOf)));
+                    if (couldBeVerified) familyUnverified.add(ruleId);
+                    continue;
+                }
+                if (evidenceAttempts.values().stream().map(AcademicRecord.AttemptItem::getAttemptId)
+                    .distinct().count() != news.size()) {
+                    skippedComplexRules.add(ruleId);
+                    continue;
+                }
+
+                Map<String, String> attemptIds = new LinkedHashMap<>();
+                Map<String, Date> completedAt = new LinkedHashMap<>();
+                evidenceAttempts.forEach((code, attempt) -> {
+                    attemptIds.put(code, attempt.getAttemptId());
+                    completedAt.put(code, attempt.getCompletedAt());
+                });
+                // Keep highest-score GPA independent of the attempt proving eligibility.
+                double points = news.stream().mapToDouble(c ->
+                    gradeConversion.convert(bestScore.get(c)).score4() * creditByCode.get(c)).sum();
+                int totalCredits = news.stream().mapToInt(creditByCode::get).sum();
+                double representativeGrade4 = points / totalCredits;
+                if (persistEvidence) {
+                    evidenceRepository.insert(RecognitionEvidence.builder()
+                        .id(RecognitionEvidence.stableId(student.getId(), curriculum.getId(), familyVersions.getKey()))
+                        .studentId(student.getId()).curriculumId(curriculum.getId())
+                        .ruleId(rule.getId()).ruleFamilyId(familyVersions.getKey())
+                        .versionNumber(rule.getVersionNumber()).originalCourseCodes(new ArrayList<>(olds))
+                        .replacementCourseCodes(new ArrayList<>(news)).attemptIds(attemptIds)
+                        .grade4(representativeGrade4).recognizedAt(Date.from(asOf)).build());
+                }
+
+                Map<String,Object> evidence = new LinkedHashMap<>();
+                evidence.put("ruleId", ruleId);
+                evidence.put("ruleFamilyId", familyVersions.getKey().toHexString());
+                evidence.put("versionNumber", rule.getVersionNumber());
+                evidence.put("oldCourseCodes", olds);
+                evidence.put("newCourseCodes", news);
+                evidence.put("effectiveDate", rule.getEffectiveDate());
+                evidence.put("publishedAt", rule.getPublishedAt());
+                evidence.put("attemptIds", attemptIds);
+                evidence.put("completedAt", completedAt);
+                recognitionEvidence.add(evidence);
+                recognizedRuleIds.add(rule.getId());
                 for (String old : olds) {
                     replacementForOld.put(old, news);
                     replacementGrade4ForOld.put(old, representativeGrade4);
                 }
                 claimedReplacementCourses.addAll(news);
-            } else {
-                recognitionEvidence.remove(evidence);
-            }
-            if (verifiedForCurrentEvaluation) {
+                claimedAttemptIds.addAll(attemptIds.values());
                 familyRecognized = true;
-                break; // one recognized version per family
-            }
+                break;
             }
             if (!familyRecognized) historyVerificationRequired.addAll(familyUnverified);
         }
@@ -249,7 +259,6 @@ public class CurriculumEvaluationService {
             .map(Map.Entry::getKey).collect(Collectors.toSet());
         // Non-numeric pass status is only valid for courses explicitly configured
         // as PASS_FAIL; it is added after collecting curriculum metadata below.
-        passed.addAll(replacementForOld.keySet());
         passed.addAll(passedWithoutScore);
         Set<String> configuredPassFail = new HashSet<>();
         if (curriculum.getSemesters() != null) for (Curriculum.SemesterItem semester : curriculum.getSemesters()) {
@@ -287,8 +296,16 @@ public class CurriculumEvaluationService {
             }
             active.add(group);
         }
-        // A replacement's actual code cannot simultaneously earn elective credits.
-        Set<String> unavailableForOtherGroups = new HashSet<>(claimedReplacementCourses);
+        // A directly passed mandatory course has first claim on its own credits.
+        // Exclude the whole mapping when any of its sources is reserved this way.
+        Set<String> directlyPassedMandatory = new HashSet<>(reservedMandatory);
+        directlyPassedMandatory.retainAll(passed);
+        Map<String, List<String>> graduationReplacements = new HashMap<>();
+        replacementForOld.forEach((old, sources) -> {
+            if (Collections.disjoint(sources, directlyPassedMandatory))
+                graduationReplacements.put(old, sources);
+        });
+        passed.addAll(graduationReplacements.keySet());
         List<List<List<String>>> choices = new ArrayList<>();
         for (Curriculum.RequirementGroupItem group : active) {
             String kind = group.getKind();
@@ -303,7 +320,7 @@ public class CurriculumEvaluationService {
                     for (Curriculum.CompletionOptionItem option : group.getCompletionOptions()) {
                         List<String> codes = unique(option.getCourseCodes());
                         if (codes.isEmpty() || !passed.containsAll(codes) ||
-                            codes.stream().anyMatch(c -> reservedMandatory.contains(c) || unavailableForOtherGroups.contains(c))) continue;
+                            codes.stream().anyMatch(reservedMandatory::contains)) continue;
                         if (codes.stream().mapToInt(c -> credits(c, creditByCode)).sum() == quota)
                             alternatives.add(codes);
                     }
@@ -311,15 +328,14 @@ public class CurriculumEvaluationService {
                 choices.add(alternatives);
             } else {
                 List<String> eligible = unique(group.getEligibleCourseCodes()).stream()
-                    .filter(c -> passed.contains(c) && !reservedMandatory.contains(c) && !unavailableForOtherGroups.contains(c))
+                    .filter(c -> passed.contains(c) && !reservedMandatory.contains(c))
                     .collect(Collectors.toList());
                 choices.add(electiveOptions(eligible, creditByCode, quota));
             }
         }
-        // Joint optimization prevents overlapping electives and graduation alternatives
-        // from recognizing the same course in two groups.
+        // Allocate original course codes and the actual courses backing them together.
         Allocation best = new Allocation();
-        allocate(0, active, choices, new HashSet<>(), new ArrayList<>(), 0, creditByCode, best);
+        allocate(0, active, choices, new HashSet<>(), new ArrayList<>(), creditByCode, graduationReplacements, best);
         if (best.selection == null) throw new IllegalStateException("Không tìm được phương án xét tín chỉ");
         List<Map<String,Object>> groupResults = new ArrayList<>();
         int requiredTotal = 0, recognizedTotal = 0;
@@ -401,10 +417,10 @@ public class CurriculumEvaluationService {
         result.put("replacementRecognitionScope", "PUBLISHED_RULES_AND_PERSISTED_EVIDENCE");
         result.put("historicalEligibilityUnverifiedRuleIds", historyVerificationRequired);
         result.put("recognizedReplacements", replacementForOld);
-        result.put("recognizedReplacementRuleIds", recognitionEvidence.stream()
-            .map(e -> e.get("ruleId")).toList());
+        result.put("recognizedReplacementRuleIds", recognizedRuleIds.stream().map(ObjectId::toHexString).toList());
         result.put("replacementRecognitionEvidencePreview", recognitionEvidence);
-        result.put("historicalRecognitionSnapshotsPersisted", persistEvidence && historyVerificationRequired.isEmpty());
+        result.put("historicalRecognitionSnapshotsPersisted", persistEvidence && historyVerificationRequired.isEmpty()
+            && invalidHistoricalEvidenceIds.isEmpty());
         result.put("unsupportedComplexRuleIds", skippedComplexRules);
         result.put("gpaIncluded", true);
         result.put("gpaIncludesFailedAttempts", true);
@@ -419,12 +435,11 @@ public class CurriculumEvaluationService {
                 if (passFailCourses.contains(code) && !passed.contains(code))
                     unresolvedPassFail.add(code);
         }
-        result.put("officialGraduationEligible", persistEvidence && allComplete
-            && historyVerificationRequired.isEmpty() && skippedComplexRules.isEmpty()
-            && unresolvedPassFail.isEmpty());
+        result.put("officialGraduationEligible", persistEvidence && allComplete);
         result.put("passFailVerificationRequired", !unresolvedPassFail.isEmpty());
         result.put("unverifiedPassFailCourseCodes", unresolvedPassFail);
         result.put("historicalEvidenceIssues", historyVerificationRequired);
+        result.put("invalidHistoricalEvidenceIds", invalidHistoricalEvidenceIds);
         result.put("recognizedPassedCoursesGpaPreview", gpaCredits == 0 ? null :
             Math.round((weightedGradePoints / gpaCredits) * 100.0) / 100.0);
         result.put("note", persistEvidence ? "Kết quả xét chính thức theo nhóm và bằng chứng đã lưu." : "Xem thử; không ghi dữ liệu công nhận.");
@@ -454,6 +469,16 @@ public class CurriculumEvaluationService {
             totals[1] == 0 ? null : Math.round(totals[0] / totals[1] * 100.0) / 100.0));
         result.put("semesterGpa4", semesterGpa);
         return result;
+    }
+
+    private static boolean needsHistoricalData(AcademicRecord.AttemptItem attempt,
+        ReplacementApplicability.Window window, Instant asOf) {
+        Date completedAt = attempt.getCompletedAt();
+        if (completedAt == null) return true;
+        Instant completion = completedAt.toInstant();
+        if (completion.isAfter(asOf) || !window.contains(completion)) return false;
+        return window.rule().getPublishedAt() == null
+            || attempt.getAttemptId() == null || attempt.getAttemptId().isBlank();
     }
 
     private static int credits(String code, Map<String,Integer> catalog) {
@@ -494,7 +519,7 @@ public class CurriculumEvaluationService {
 
     private static void allocate(int index, List<Curriculum.RequirementGroupItem> groups,
         List<List<List<String>>> choices, Set<String> used, List<List<String>> chosen,
-        int total, Map<String,Integer> catalog, Allocation best) {
+        Map<String,Integer> catalog, Map<String,List<String>> replacements, Allocation best) {
         if (index == groups.size()) {
             String key = chosen.stream().map(c -> String.join("|", c)).collect(Collectors.joining(";"));
             int capped = 0;
@@ -516,11 +541,17 @@ public class CurriculumEvaluationService {
         }
         for (List<String> option : choices.get(index)) {
             if (option.stream().anyMatch(used::contains)) continue;
-            int credits = option.stream().mapToInt(c -> credits(c, catalog)).sum();
             used.addAll(option);
-            chosen.add(option);
-            allocate(index + 1, groups, choices, used, chosen, total + credits, catalog, best);
-            chosen.remove(chosen.size() - 1);
+            // Each original in an explicit N-1 mapping may earn its own credits.
+            // Its source cannot also be selected as a directly completed course.
+            boolean reusesSource = used.stream().anyMatch(code ->
+                replacements.getOrDefault(code, List.of()).stream()
+                    .anyMatch(source -> used.contains(source) && !replacements.containsKey(source)));
+            if (!reusesSource) {
+                chosen.add(option);
+                allocate(index + 1, groups, choices, used, chosen, catalog, replacements, best);
+                chosen.remove(chosen.size() - 1);
+            }
             used.removeAll(option);
         }
     }

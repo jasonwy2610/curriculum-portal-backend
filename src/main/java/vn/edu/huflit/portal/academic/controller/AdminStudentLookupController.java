@@ -55,6 +55,7 @@ public class AdminStudentLookupController {
                 "fullName", u.getFullName() == null ? "" : u.getFullName(),
                 "email", u.getEmail() == null ? "" : u.getEmail(),
                 "cohort", u.getCohort() == null ? "" : u.getCohort(),
+                "chosenSpecializationCode", u.getChosenSpecializationCode() == null ? "" : u.getChosenSpecializationCode(),
                 "curriculumId", u.getCurriculumId() == null ? "" : u.getCurriculumId().toHexString(),
                 "majorId", u.getMajorId() == null ? "" : u.getMajorId().toHexString()
         )).toList();

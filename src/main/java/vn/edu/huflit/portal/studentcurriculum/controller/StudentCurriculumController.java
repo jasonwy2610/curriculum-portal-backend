@@ -13,9 +13,9 @@ import vn.edu.huflit.portal.course.repository.CourseRepository;
 import vn.edu.huflit.portal.curriculum.model.Curriculum;
 import vn.edu.huflit.portal.curriculum.repository.CurriculumRepository;
 import vn.edu.huflit.portal.academic.repository.AcademicRecordRepository;
-import vn.edu.huflit.portal.replacement.repository.ReplacementRuleRepository;
+import vn.edu.huflit.portal.replacement.service.ReplacementApplicability;
 
-import java.time.LocalDate;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,9 +28,9 @@ public class StudentCurriculumController {
  private final CurriculumRepository curriculumRepository;
  private final AcademicRecordRepository academicRecordRepository;
  private final CourseRepository courseRepository;
- private final ReplacementRuleRepository replacementRuleRepository;
+ private final ReplacementApplicability applicability;
 
- /** Preliminary group evaluation; intentionally separate from legacy view until replacement/GPA is implemented. */
+ /** Evaluation without persisting new recognition evidence. */
  @GetMapping("/evaluation-preview")
  public ResponseEntity<ApiResponse<Map<String,Object>>> previewEvaluation(@AuthenticationPrincipal User user) {
    return ResponseEntity.ok(ApiResponse.ok(curriculumEvaluationService.evaluate(user)));
@@ -58,7 +58,7 @@ public class StudentCurriculumController {
    Map<String,Course> catalog=new HashMap<>();
    courseRepository.findAll().forEach(course->catalog.put(course.getCourseCode(),course));
 
-   // CTĐT kế tiếp: cùng ngành, bắt đầu sau đúng chu kỳ 2 năm.
+   // Next-curriculum metadata for display only.
    Integer nextYear=c.getAppliedYear()==null?null:c.getAppliedYear()+2;
    Curriculum next=null;
    if (nextYear!=null && c.getMajorId()!=null) {
@@ -68,19 +68,19 @@ public class StudentCurriculumController {
          .max(Comparator.comparing(x->x.getVersion()==null?0:x.getVersion())).orElse(null);
    }
    final Curriculum following=next;
-   Set<String> nextCodes=new HashSet<>();
-   if (following!=null) for (Curriculum.SemesterItem s:safe(following.getSemesters()))
-     for (Curriculum.CurriculumCourseItem ci:safe(s.getCourses()))
-       if (ci.getCourseCode()!=null) nextCodes.add(ci.getCourseCode());
-   Map<String,List<ReplacementRule>> rulesByOld=new HashMap<>();
-   if (following!=null) for (ReplacementRule rule:replacementRuleRepository.findAll()) {
-     if (!"ACTIVE".equalsIgnoreCase(rule.getStatus()) || !Objects.equals(c.getMajorId(),rule.getMajorId())) continue;
-     if (rule.getApplicableCohorts()!=null && !rule.getApplicableCohorts().isEmpty()
-         && !rule.getApplicableCohorts().contains(c.getCohort())) continue;
-     if (safe(rule.getNewCourseCodes()).isEmpty() || !nextCodes.containsAll(rule.getNewCourseCodes())) continue;
-     for (String old:safe(rule.getOldCourseCodes())) {
-       // Chỉ thông báo khi môn cũ thực sự không còn trong CTĐT kế tiếp.
-       if (!nextCodes.contains(old)) rulesByOld.computeIfAbsent(old,k->new ArrayList<>()).add(rule);
+   @SuppressWarnings("unchecked")
+   Map<String,List<String>> recognizedMap =
+       (Map<String,List<String>>) official.getOrDefault("recognizedReplacements", Map.of());
+   @SuppressWarnings("unchecked")
+   List<String> recognizedRuleIds =
+       (List<String>) official.getOrDefault("recognizedReplacementRuleIds", List.of());
+   Instant now = Instant.now();
+   Map<String,List<ReplacementRule>> rulesByOld = new HashMap<>();
+   for (var window : applicability.windows(user, c, now)) {
+     ReplacementRule rule = window.rule();
+     if (!window.contains(now) && !recognizedRuleIds.contains(rule.getId().toHexString())) continue;
+     for (String old : safe(rule.getOldCourseCodes())) {
+       rulesByOld.computeIfAbsent(old, ignored -> new ArrayList<>()).add(rule);
      }
    }
 
@@ -100,22 +100,13 @@ public class StudentCurriculumController {
        int credits=ci.getCredits()!=null?ci.getCredits():course!=null&&course.getCredits()!=null?course.getCredits():0;
        boolean originalPassed=Boolean.TRUE.equals(passedByCode.get(code));
        List<Map<String,Object>> replacementViews=new ArrayList<>();
-       boolean replacementPassed=false;
+       boolean replacementPassed=recognizedMap.containsKey(code);
        for (ReplacementRule rule:rulesByOld.getOrDefault(code,List.of())) {
-         int effectiveYear=nextYear;
-         if (rule.getEffectiveDate()!=null) {
-           int ruleYear=rule.getEffectiveDate().toInstant().atZone(ZoneId.systemDefault()).getYear();
-           effectiveYear=Math.max(effectiveYear,ruleYear);
-         }
+         int effectiveYear=rule.getEffectiveDate().toInstant().atZone(ZoneId.systemDefault()).getYear();
          boolean allPassed=safe(rule.getNewCourseCodes()).stream().allMatch(newCode->Boolean.TRUE.equals(passedByCode.get(newCode)));
-         // N-1 cần quy tắc quy đổi riêng, không tự động công nhận để tránh cộng trùng.
-         boolean supported="1-1".equals(rule.getRuleType()) || "1-N".equals(rule.getRuleType());
-         // Only authoritative evaluation can recognize a replacement; do not infer from next curriculum.
-         @SuppressWarnings("unchecked") Map<String,List<String>> recognizedMap =
-             (Map<String,List<String>>) official.getOrDefault("recognizedReplacements", Map.of());
-         boolean recognized = recognizedMap.containsKey(code)
-             && recognizedMap.get(code).containsAll(safe(rule.getNewCourseCodes()));
-         if (recognized) replacementPassed=true;
+         boolean supported=rule.getRuleType()!=null && Set.of("1-1", "1-N", "N-1").contains(rule.getRuleType());
+         boolean recognized=replacementPassed && recognizedRuleIds.contains(rule.getId().toHexString())
+             && new HashSet<>(safe(rule.getNewCourseCodes())).equals(new HashSet<>(recognizedMap.get(code)));
          Map<String,Object> rv=new LinkedHashMap<>();
          rv.put("ruleType",rule.getRuleType()); rv.put("oldCourseCodes",safe(rule.getOldCourseCodes()));
          rv.put("newCourseCodes",safe(rule.getNewCourseCodes()));
@@ -130,8 +121,8 @@ public class StudentCurriculumController {
          rv.put("applicableCohorts",safe(rule.getApplicableCohorts()));
          rv.put("recognized",recognized); rv.put("allReplacementCoursesPassed",allPassed);
          rv.put("automaticRecognitionSupported",supported);
-         rv.put("nextCurriculumCode",following.getCurriculumCode());
-         rv.put("nextCurriculumName",following.getCurriculumName());
+         rv.put("nextCurriculumCode",following==null?null:following.getCurriculumCode());
+         rv.put("nextCurriculumName",following==null?null:following.getCurriculumName());
          replacementViews.add(rv);
        }
        boolean isPassed=originalPassed || replacementPassed;

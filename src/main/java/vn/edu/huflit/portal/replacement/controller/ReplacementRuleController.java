@@ -8,6 +8,7 @@ import vn.edu.huflit.portal.dto.response.ApiResponse;
 import vn.edu.huflit.portal.entity.ReplacementRule;
 import vn.edu.huflit.portal.entity.User;
 import vn.edu.huflit.portal.replacement.service.ReplacementRuleService;
+import java.util.Date;
 import java.util.List;
 
 @RestController
@@ -49,6 +50,20 @@ public class ReplacementRuleController {
     public ResponseEntity<ApiResponse<ReplacementRule>> publish(@AuthenticationPrincipal User user, @PathVariable String id) {
         return ResponseEntity.ok(ApiResponse.ok(service.publish(user, id)));
     }
+
+    @GetMapping("/api/v1/admin/replacement-rules/{id}/validation")
+    public ResponseEntity<ApiResponse<ReplacementRule>> validate(@PathVariable String id) {
+        return ResponseEntity.ok(ApiResponse.ok(service.validateForPublication(id)));
+    }
+
+    @PostMapping("/api/v1/admin/replacement-rules/{id}/retire")
+    public ResponseEntity<ApiResponse<ReplacementRule>> retire(@AuthenticationPrincipal User user,
+        @PathVariable String id, @RequestBody(required = false) RetirementRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(service.retire(user, id,
+            request == null ? null : request.endsAt(), request == null ? null : request.reason())));
+    }
+
+    public record RetirementRequest(Date endsAt, String reason) {}
 
     @PutMapping("/api/v1/admin/replacement-rules/{id}")
     public ResponseEntity<ApiResponse<ReplacementRule>> update(@AuthenticationPrincipal User user, @PathVariable String id, @RequestBody ReplacementRule rule) {

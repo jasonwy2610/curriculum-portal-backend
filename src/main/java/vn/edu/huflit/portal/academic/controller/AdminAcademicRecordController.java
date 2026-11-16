@@ -12,11 +12,11 @@ import vn.edu.huflit.portal.academic.service.AcademicRecordService;
 import java.util.List;
 import java.util.Date;
 import java.time.LocalDate;
-import java.time.ZoneId;
+import java.time.Instant;
 import vn.edu.huflit.portal.curriculum.repository.CurriculumRepository;
 import vn.edu.huflit.portal.curriculum.model.Curriculum;
 import vn.edu.huflit.portal.course.repository.CourseRepository;
-import vn.edu.huflit.portal.replacement.repository.ReplacementRuleRepository;
+import vn.edu.huflit.portal.replacement.service.ReplacementApplicability;
 
 @RestController
 @RequestMapping("/api/v1/admin/academic-records")
@@ -26,7 +26,7 @@ public class AdminAcademicRecordController {
  private final UserRepository users;
  private final CurriculumRepository curriculums;
  private final CourseRepository courses;
- private final ReplacementRuleRepository replacementRules;
+ private final ReplacementApplicability applicability;
 
  @GetMapping("/student/{studentId}")
  public ResponseEntity<ApiResponse<List<AcademicRecordResponse>>> byStudent(@PathVariable String studentId) {
@@ -53,14 +53,20 @@ public class AdminAcademicRecordController {
    if(student.getCohort()!=null && student.getCohort().matches("K20[0-9]{2}") && year<Integer.parseInt(student.getCohort().substring(1)))
        throw new IllegalArgumentException("Không thể nhập điểm trước khóa tuyển sinh");
    if(year>LocalDate.now().getYear()+1)throw new IllegalArgumentException("Năm học thực tế nằm quá xa trong tương lai");
-   boolean replacement=student.getMajorId()!=null && replacementRules.findByMajorIdAndApplicableCohortsContaining(student.getMajorId(),student.getCohort()).stream().anyMatch(rule -> {
-       if(!"ACTIVE".equals(rule.getStatus()) || rule.getNewCourseCodes()==null || !rule.getNewCourseCodes().contains(req.getCourseCode()))return false;
-       if(rule.getEffectiveDate()!=null && rule.getEffectiveDate().after(Date.from(LocalDate.of(year,12,31).atStartOfDay(ZoneId.systemDefault()).toInstant())))return false;
-       return rule.getOldCourseCodes()!=null && rule.getOldCourseCodes().stream().anyMatch(oldCode -> curriculum.getSemesters()!=null && curriculum.getSemesters().stream().anyMatch(sem -> sem.getCourses()!=null && sem.getCourses().stream().anyMatch(c -> oldCode.equals(c.getCourseCode()))));
-   });
-   if(!inCurriculum&&!replacement)throw new IllegalArgumentException("Học phần không thuộc CTĐT và không có quy tắc thay thế hợp lệ");
-   if(student.getCurriculumId()!=null && !student.getCurriculumId().equals(curriculumId))
+   if (student.getCurriculumId() != null && !student.getCurriculumId().equals(curriculumId))
       throw new IllegalArgumentException("CTĐT không khớp CTĐT đang áp dụng cho sinh viên");
+
+   Instant now = Instant.now();
+   Date completedAt = req.getAttempt().getCompletedAt();
+   if (completedAt != null && completedAt.toInstant().isAfter(now))
+       throw new IllegalArgumentException("Ngày hoàn thành không được trong tương lai");
+   if (!inCurriculum && completedAt == null)
+       throw new IllegalArgumentException("Cần nhập ngày hoàn thành thực tế (completedAt) cho học phần thay thế ngoài CTĐT");
+   if (!inCurriculum && applicability.windows(student, curriculum, now).stream().noneMatch(window ->
+       window.verifies(completedAt.toInstant()) && window.rule().getNewCourseCodes() != null
+           && window.rule().getNewCourseCodes().contains(req.getCourseCode())))
+       throw new IllegalArgumentException("Học phần không có quy tắc thay thế hợp lệ tại ngày hoàn thành");
+
    return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật kết quả học tập",service.addAttempt(studentId,req.getCourseCode(),curriculumId,req.getAttempt())));
  }
  @PatchMapping("/{recordId}/attempts/{attemptId}")
