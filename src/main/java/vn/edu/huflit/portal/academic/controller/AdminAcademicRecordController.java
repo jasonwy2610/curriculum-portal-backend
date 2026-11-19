@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Date;
 import java.time.LocalDate;
 import java.time.Instant;
+import vn.edu.huflit.portal.curriculum.service.CurriculumTracks;
 import vn.edu.huflit.portal.curriculum.repository.CurriculumRepository;
 import vn.edu.huflit.portal.curriculum.model.Curriculum;
 import vn.edu.huflit.portal.course.repository.CourseRepository;
@@ -41,9 +42,10 @@ public class AdminAcademicRecordController {
    User student=users.findById(studentId).orElseThrow(()->new IllegalArgumentException("Không tìm thấy sinh viên"));
    if(!"STUDENT".equals(student.getRole())) throw new IllegalArgumentException("Tài khoản được chọn không phải sinh viên");
    if(req.getAttempt()==null) throw new IllegalArgumentException("Thiếu dữ liệu lần học");
-   if(req.getAttempt().getScore10()==null || req.getAttempt().getScore10()<0 || req.getAttempt().getScore10()>10)throw new IllegalArgumentException("Điểm phải trong khoảng 0–10");
-   if(!req.getCourseCode().matches("[A-Za-z0-9_-]{2,30}"))throw new IllegalArgumentException("Mã học phần không hợp lệ");
-   Curriculum curriculum=curriculums.findById(curriculumId).orElseThrow(()->new IllegalArgumentException("CTĐT không tồn tại"));
+   if(req.getAttempt().getScore10()==null || !Double.isFinite(req.getAttempt().getScore10()) || req.getAttempt().getScore10()<0 || req.getAttempt().getScore10()>10)throw new IllegalArgumentException("Điểm phải là số hữu hạn trong khoảng 0–10");
+   if(req.getCourseCode()==null || !req.getCourseCode().matches("[A-Za-z0-9_-]{2,30}"))throw new IllegalArgumentException("Mã học phần không hợp lệ");
+   Curriculum storedCurriculum=curriculums.findById(curriculumId).orElseThrow(()->new IllegalArgumentException("CTĐT không tồn tại"));
+   Curriculum curriculum = CurriculumTracks.forStudent(storedCurriculum, student);
    if(!courses.existsByCourseCode(req.getCourseCode()))throw new IllegalArgumentException("Học phần không có trong danh mục");
    boolean inCurriculum=curriculum.getSemesters()!=null && curriculum.getSemesters().stream().anyMatch(sem->sem.getCourses()!=null&&sem.getCourses().stream().anyMatch(c->req.getCourseCode().equals(c.getCourseCode())));
    String semesterCode=req.getAttempt().getSemesterCode();
@@ -53,9 +55,6 @@ public class AdminAcademicRecordController {
    if(student.getCohort()!=null && student.getCohort().matches("K20[0-9]{2}") && year<Integer.parseInt(student.getCohort().substring(1)))
        throw new IllegalArgumentException("Không thể nhập điểm trước khóa tuyển sinh");
    if(year>LocalDate.now().getYear()+1)throw new IllegalArgumentException("Năm học thực tế nằm quá xa trong tương lai");
-   if (student.getCurriculumId() != null && !student.getCurriculumId().equals(curriculumId))
-      throw new IllegalArgumentException("CTĐT không khớp CTĐT đang áp dụng cho sinh viên");
-
    Instant now = Instant.now();
    Date completedAt = req.getAttempt().getCompletedAt();
    if (completedAt != null && completedAt.toInstant().isAfter(now))

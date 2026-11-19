@@ -44,6 +44,9 @@ public class CurriculumResponse {
     @Builder.Default
     private List<Curriculum.RequirementGroupItem> requirementGroups = new ArrayList<>();
 
+    private java.util.Map<String, Curriculum.SpecializationTree> specializationTrees;
+    private java.util.Map<String, Curriculum.TrackCreditPlan> creditPlansBySpecialization;
+
     private String createdBy;
     private Date createdAt;
     private Date updatedAt;
@@ -82,6 +85,10 @@ public class CurriculumResponse {
                                                         .credits(c.getCredits())
                                                         .type(c.getType())
                                                         .knowledgeGroupCode(c.getKnowledgeGroupCode())
+                                                        .requirementGroupCode(c.getRequirementGroupCode())
+                                                        .countsTowardGraduation(c.getCountsTowardGraduation())
+                                                        .countsTowardGpa(c.getCountsTowardGpa())
+                                                        .completionType(c.getCompletionType())
                                                         .specializationCodes(c.getSpecializationCodes() == null ? new ArrayList<>() : new ArrayList<>(c.getSpecializationCodes()))
                                                         .prerequisiteCourseCodes(c.getPrerequisiteCourseCodes() == null ? new ArrayList<>() : new ArrayList<>(c.getPrerequisiteCourseCodes()))
                                                         .build())
@@ -109,6 +116,8 @@ public class CurriculumResponse {
                 .knowledgeGroups(groups)
                 .semesters(semList)
                 .requirementGroups(entity.getRequirementGroups() == null ? new ArrayList<>() : entity.getRequirementGroups())
+                .specializationTrees(entity.getSpecializationTrees())
+                .creditPlansBySpecialization(entity.getCreditPlansBySpecialization())
                 .createdBy(entity.getCreatedBy() != null ? entity.getCreatedBy().toHexString() : null)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())

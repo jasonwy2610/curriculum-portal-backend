@@ -37,6 +37,32 @@ class CurriculumEvaluationServiceTest {
         .majorId(new ObjectId()).cohort("K2024").build();
 
     @Test
+    void evaluatesOnlyTheAssignedSpecializationAndDoesNotLookUpNewerCurricula() {
+        Curriculum curriculum = setup(List.of("OLD"));
+        curriculum.setSpecializations(List.of(new Curriculum.SpecializationItem("AA", "A"),
+            new Curriculum.SpecializationItem("BB", "B")));
+        curriculum.setSpecializationTrees(Map.of(
+            "AA", new Curriculum.SpecializationTree(List.of(),
+                List.of(Curriculum.RequirementGroupItem.builder().groupCode("A").kind("MANDATORY_COMMON")
+                    .requiredCredits(3).eligibleCourseCodes(List.of("OLD")).build())),
+            "BB", new Curriculum.SpecializationTree(List.of(),
+                List.of(Curriculum.RequirementGroupItem.builder().groupCode("B").kind("MANDATORY_COMMON")
+                    .requiredCredits(3).eligibleCourseCodes(List.of("OTHER")).build()))));
+        student.setChosenSpecializationCode("AA");
+        attempts(record("OLD", attempt("a", 7, START)), record("OTHER", attempt("b", 10, START)));
+
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(3, result.get("requiredCredits"));
+        assertEquals(3, result.get("recognizedCredits"));
+        assertEquals(3, result.get("gpaCredits"));
+        assertEquals(3.0, result.get("cumulativeGpa4"));
+        verify(curricula).findById(student.getCurriculumId());
+        verifyNoMoreInteractions(curricula);
+        student.setChosenSpecializationCode("UNKNOWN");
+        assertThrows(IllegalArgumentException.class, () -> service.evaluate(student));
+    }
+
+    @Test
     void recognizesOneToOneAtEffectiveDate() {
         setup(List.of("OLD"), rule("1-1", List.of("OLD"), List.of("NEW")));
         attempts(record("NEW", attempt("pass", 7, START)));
@@ -235,6 +261,13 @@ class CurriculumEvaluationServiceTest {
         attempts(mandatory, replacement, record("ALT", attempt("alternative", 8, START)));
         Map<String, Object> result = service.evaluateOfficial(student);
         assertEquals(9, result.get("recognizedCredits"));
+        // A later elective must not replace the earlier prefix merely to free
+        // its source for a graduation option.
+        attempts(mandatory, replacement, record("ALT", attempt("later", 8, REVISION)));
+        Map<String,Object> chronological = service.evaluateOfficial(student);
+        assertEquals(6, chronological.get("recognizedCredits"));
+        assertEquals(result.get("gpaCredits"), chronological.get("gpaCredits"));
+        assertEquals(result.get("cumulativeGpa4"), chronological.get("cumulativeGpa4"));
         assertEquals(true, result.get("officialGraduationEligible"));
         assertEquals(9, result.get("gpaCredits"));
         assertEquals(3.0, result.get("cumulativeGpa4"));
@@ -303,7 +336,7 @@ class CurriculumEvaluationServiceTest {
         attempts(record("NEW", attempt("pass", 7, START)));
 
         Map<String, Object> result = service.evaluate(student);
-        assertEquals(1, ((Map<?, ?>) result.get("recognizedReplacements")).size());
+        assertEquals(0, ((Map<?, ?>) result.get("recognizedReplacements")).size());
         assertEquals(3, result.get("recognizedCredits"));
         assertEquals(3, result.get("gpaCredits"));
     }
@@ -347,8 +380,197 @@ class CurriculumEvaluationServiceTest {
         verify(evidence, never()).save(any(RecognitionEvidence.class));
     }
 
+    @Test
+    void electivesUseChronologicalPrefixInsteadOfTheSmallestExcessCombination() {
+        electiveSetup(5);
+        attempts(record("NEW", attempt("n", 7, START)),
+            record("ALT", attempt("a", 8, START.plusSeconds(60))),
+            record("OTHER", attempt("o", 10, REVISION)));
+        Map<String,Object> result = service.evaluate(student);
+        Map<?,?> group = ((List<Map<?,?>>) result.get("groupProgress")).getFirst();
+        assertEquals(List.of("NEW", "ALT"), group.get("recognizedCourseCodes"));
+        assertEquals(7, group.get("actualSelectedCredits"));
+        assertEquals(5, result.get("recognizedCredits"));
+        assertEquals(true, result.get("requirementsComplete"));
+        assertEquals(9, result.get("gpaCredits"));
+        assertEquals(3.39, result.get("cumulativeGpa4"));
+    }
+
+    @Test
+    void electiveRetakesUseFirstPassForOrderAndHighestScoreForGpa() {
+        electiveSetup(3);
+        var failed = attempt("fail", 2, START.minusSeconds(60));
+        var first = attempt("first", 5, START);
+        var best = attempt("best", 10, REVISION);
+        var alternative = attempt("alt", 7, START.plusSeconds(60));
+        failed.setSemesterCode("2023-2"); first.setSemesterCode("2024-1");
+        best.setSemesterCode("2024-2"); alternative.setSemesterCode("2024-1");
+        attempts(record("NEW", failed, first, best), record("ALT", alternative));
+        Map<String,Object> result = service.evaluate(student);
+        assertEquals(List.of("NEW"), ((List<Map<?,?>>) result.get("groupProgress")).getFirst().get("recognizedCourseCodes"));
+        assertEquals(3, result.get("recognizedCredits"));
+        assertEquals(7, result.get("gpaCredits"));
+        assertEquals(3.57, result.get("cumulativeGpa4"));
+        assertEquals(Map.of("2023-2", 0.0, "2024-1", 2.14, "2024-2", 4.0), result.get("semesterGpa4"));
+    }
+
+    @Test
+    void electiveTiesUseCodeAndAFailedElectiveCanBeCompensated() {
+        electiveSetup(5);
+        attempts(record("NEW", attempt("n", 3, START)), record("ALT", attempt("a", 7, START)),
+            record("OTHER", attempt("o", 7, START)));
+        Map<String,Object> result = service.evaluate(student);
+        assertEquals(List.of("ALT", "OTHER"), ((List<Map<?,?>>) result.get("groupProgress")).getFirst().get("recognizedCourseCodes"));
+        assertEquals(true, result.get("requirementsComplete"));
+        assertEquals(5, result.get("recognizedCredits"));
+        assertEquals(9, result.get("gpaCredits")); // Includes the failed elective in GPA.
+    }
+
+    @Test
+    void electiveCannotSupplyMandatoryReplacementRegardlessOfRuleShape() {
+        for (String type : List.of("1-1", "1-N", "N-1")) {
+            List<String> olds = type.equals("N-1") ? List.of("OLD", "OTHER") : List.of("OLD");
+            List<String> news = type.equals("1-N") ? List.of("NEW", "ALT") : List.of("NEW");
+            Curriculum curriculum = setup(olds, rule(type, olds, news));
+            curriculum.setRequirementGroups(List.of(curriculum.getRequirementGroups().getFirst(),
+                Curriculum.RequirementGroupItem.builder().groupCode("FREE").kind("ELECTIVE_FREE")
+                    .eligibleCourseCodes(List.of("NEW", "ALT")).requiredCredits(3).build()));
+            attempts(record("NEW", attempt("n", 7, START)), record("ALT", attempt("a", 8, START)));
+            Map<String,Object> result = service.evaluateOfficial(student);
+            assertEquals(Map.of(), result.get("recognizedReplacements"), type);
+            assertEquals(3, result.get("recognizedCredits"), type);
+            assertEquals(false, result.get("requirementsComplete"), type);
+            assertEquals(6, result.get("gpaCredits"), type);
+        }
+        verify(evidence, never()).insert(any(RecognitionEvidence.class));
+    }
+
+    @Test
+    void partialElectiveCreditDoesNotRequireRepeatingFailedAlternatives() {
+        electiveSetup(5);
+        attempts(record("OTHER", attempt("two", 7, START)), record("NEW", attempt("fail", 0, START)));
+        Map<String,Object> result = service.evaluate(student);
+        assertEquals(2, result.get("recognizedCredits"));
+        assertEquals(false, result.get("requirementsComplete"));
+        assertEquals(List.of("OTHER"), ((List<Map<?,?>>) result.get("groupProgress")).getFirst().get("recognizedCourseCodes"));
+    }
+
+    @Test
+    void tiedFirstPassingInstantsUseCourseCodeRatherThanScoreOrCredit() {
+        electiveSetup(3);
+        attempts(record("NEW", attempt("n", 10, START)), record("ALT", attempt("a", 4, START)));
+        Map<String,Object> result = service.evaluate(student);
+        assertEquals(List.of("ALT"), ((List<Map<?,?>>) result.get("groupProgress")).getFirst().get("recognizedCourseCodes"));
+        assertEquals(3, result.get("recognizedCredits"));
+    }
+
+    @Test
+    void missingFirstPassDateRequiresVerificationWithoutChangingGpaOrWritingHistory() {
+        electiveSetup(3);
+        attempts(record("NEW", attempt("unknown", 5, null), attempt("best", 10, REVISION)),
+            record("ALT", attempt("known", 7, START)));
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(List.of("NEW"), result.get("electiveHistoryVerificationRequiredCourseCodes"));
+        assertEquals(0, result.get("recognizedCredits"));
+        assertEquals(7, result.get("gpaCredits"));
+        assertEquals(3.57, result.get("cumulativeGpa4"));
+        verify(records, never()).save(any(AcademicRecord.class));
+    }
+
+    @Test
+    void existingMandatoryRecognitionIsRetainedAndItsElectiveSourceCannotEarnCreditAgain() {
+        Curriculum curriculum = setup(List.of("OLD"));
+        curriculum.setRequirementGroups(List.of(curriculum.getRequirementGroups().getFirst(),
+            Curriculum.RequirementGroupItem.builder().groupCode("FREE").kind("ELECTIVE_FREE")
+                .requiredCredits(3).eligibleCourseCodes(List.of("NEW", "ALT")).build()));
+        RecognitionEvidence saved = RecognitionEvidence.builder().id(new ObjectId()).ruleId(new ObjectId())
+            .originalCourseCodes(List.of("OLD")).replacementCourseCodes(List.of("NEW"))
+            .attemptIds(Map.of("NEW", "older")).grade4(2.5).build();
+        when(evidence.findByStudentIdAndCurriculumId(student.getId(), student.getCurriculumId())).thenReturn(List.of(saved));
+        attempts(record("NEW", attempt("older", 7, START)));
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(Map.of("OLD", List.of("NEW")), result.get("recognizedReplacements"));
+        assertEquals(3, result.get("recognizedCredits"));
+        assertEquals(2.5, result.get("cumulativeGpa4"));
+        verify(evidence, never()).save(any(RecognitionEvidence.class));
+        verify(evidence, never()).insert(any(RecognitionEvidence.class));
+        attempts(record("NEW", attempt("older", 7, START)), record("ALT", attempt("other", 8, REVISION)));
+        assertEquals(6, service.evaluateOfficial(student).get("recognizedCredits"));
+        assertEquals(2.5, saved.getGrade4());
+    }
+
+    @Test
+    void electiveReplacementUsesFirstEligibleBundleCompletionNotHighestScoringAttempts() {
+        Curriculum curriculum = setup(List.of("OLD"), rule("1-N", List.of("OLD"), List.of("NEW", "OTHER")));
+        curriculum.setRequirementGroups(List.of(Curriculum.RequirementGroupItem.builder()
+            .groupCode("FREE").kind("ELECTIVE_FREE").requiredCredits(3).eligibleCourseCodes(List.of("OLD", "ALT")).build()));
+        attempts(record("NEW", attempt("before", 8, START.minusSeconds(1)),
+                attempt("eligible", 5, START), attempt("best", 10, REVISION)),
+            record("OTHER", attempt("bundle", 7, START.plusSeconds(60))),
+            record("ALT", attempt("alt", 7, START.plusSeconds(120))));
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(List.of("OLD"), ((List<Map<?,?>>) result.get("groupProgress")).getFirst().get("recognizedCourseCodes"));
+        assertEquals(3, result.get("recognizedCredits"));
+        assertEquals(List.of(), result.get("electiveHistoryVerificationRequiredCourseCodes"));
+        assertEquals(6, result.get("gpaCredits"));
+        assertEquals(3.25, result.get("cumulativeGpa4"));
+    }
+
+    @Test
+    void electiveAliasAndItsSourceAreNotBothCountedInsideTheSameGroup() {
+        Curriculum curriculum = setup(List.of("OLD"), rule("1-1", List.of("OLD"), List.of("NEW")));
+        curriculum.setRequirementGroups(List.of(Curriculum.RequirementGroupItem.builder()
+            .groupCode("FREE").kind("ELECTIVE_FREE").requiredCredits(6)
+            .eligibleCourseCodes(List.of("OLD", "NEW", "ALT")).build()));
+        attempts(record("NEW", attempt("n", 7, START)), record("ALT", attempt("a", 8, REVISION)));
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(List.of("NEW", "ALT"), ((List<Map<?,?>>) result.get("groupProgress")).getFirst().get("recognizedCourseCodes"));
+        assertEquals(6, result.get("recognizedCredits"));
+        assertEquals(6, result.get("gpaCredits"));
+    }
+
+    @Test
+    void missingDateDoesNotBlockAGroupWhenThereIsNoSurplusToOrder() {
+        electiveSetup(2);
+        attempts(record("OTHER", attempt("legacy", 7, null)));
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(2, result.get("recognizedCredits"));
+        assertEquals(true, result.get("officialGraduationEligible"));
+        assertEquals(List.of(), result.get("electiveHistoryVerificationRequiredCourseCodes"));
+    }
+
+    @Test
+    void anExistingElectiveEntitlementDoesNotNeedItsDeletedRuleWhenNoSurplusExists() {
+        Curriculum curriculum = setup(List.of("OLD"));
+        curriculum.setRequirementGroups(List.of(Curriculum.RequirementGroupItem.builder()
+            .groupCode("FREE").kind("ELECTIVE_FREE").requiredCredits(3).eligibleCourseCodes(List.of("OLD", "ALT")).build()));
+        RecognitionEvidence saved = RecognitionEvidence.builder().id(new ObjectId()).ruleId(new ObjectId())
+            .originalCourseCodes(List.of("OLD")).replacementCourseCodes(List.of("NEW"))
+            .attemptIds(Map.of("NEW", "older")).grade4(2.5).build();
+        when(evidence.findByStudentIdAndCurriculumId(student.getId(), student.getCurriculumId())).thenReturn(List.of(saved));
+        attempts();
+        Map<String,Object> result = service.evaluateOfficial(student);
+        assertEquals(3, result.get("recognizedCredits"));
+        assertEquals(2.5, result.get("cumulativeGpa4"));
+        assertEquals(true, result.get("officialGraduationEligible"));
+        verify(evidence, never()).save(any(RecognitionEvidence.class));
+        verify(evidence, never()).insert(any(RecognitionEvidence.class));
+    }
+
+    private Curriculum electiveSetup(int quota) {
+        Curriculum curriculum = setup(List.of("OLD"));
+        curriculum.setRequirementGroups(List.of(Curriculum.RequirementGroupItem.builder()
+            .groupCode("FREE").kind("ELECTIVE_FREE").requiredCredits(quota)
+            .eligibleCourseCodes(List.of("NEW", "ALT", "OTHER")).build()));
+        when(catalog.findAll()).thenReturn(List.of(Course.builder().courseCode("NEW").credits(4).build(),
+            Course.builder().courseCode("ALT").credits(3).build(),
+            Course.builder().courseCode("OTHER").credits(2).build()));
+        return curriculum;
+    }
+
     private Curriculum setup(List<String> originals, ReplacementRule... versions) {
         Curriculum curriculum = Curriculum.builder().id(student.getCurriculumId())
+            .majorId(student.getMajorId()).cohort(student.getCohort())
             .requirementGroups(List.of(Curriculum.RequirementGroupItem.builder()
                 .groupCode("CORE").kind("MANDATORY_COMMON").eligibleCourseCodes(originals)
                 .requiredCredits(originals.size() * 3).build())).build();

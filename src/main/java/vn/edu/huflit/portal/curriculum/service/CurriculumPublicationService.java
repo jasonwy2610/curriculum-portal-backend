@@ -36,8 +36,11 @@ public class CurriculumPublicationService {
         if (groups == null) throw new IllegalArgumentException("requirementGroups khong duoc null");
         Curriculum current = draft(id);
         // Atomic conditional update avoids changing a curriculum concurrently published.
-        Query query = Query.query(Criteria.where("_id").is(current.getId()).and("status").is("DRAFT"));
-        Curriculum saved = mongoTemplate.findAndModify(query, new Update().set("requirementGroups", groups),
+        if (!CurriculumTracks.trees(current).isEmpty())
+            throw new IllegalArgumentException("CTĐT có cây riêng; hãy lưu nhóm yêu cầu trong từng cây chuyên ngành");
+        Query query = Query.query(Criteria.where("_id").is(current.getId()).and("status").is("DRAFT")
+            .and("revision").is(current.getRevision()));
+        Curriculum saved = mongoTemplate.findAndModify(query, new Update().set("requirementGroups", groups).inc("revision", 1),
                 FindAndModifyOptions.options().returnNew(true), Curriculum.class);
         if (saved == null) throw new IllegalStateException("CTDT da thay doi trang thai; vui long tai lai");
         changeLogs.recordChange("Curriculum", saved.getId(), "UPDATE",
@@ -58,11 +61,13 @@ public class CurriculumPublicationService {
         // Compare current document state to avoid overwriting concurrent edits to requirement groups.
         Query query = Query.query(Criteria.where("_id").is(current.getId())
                 .and("status").is("DRAFT").and("requirementGroups").is(current.getRequirementGroups())
+                .and("revision").is(current.getRevision())
+                .and("majorId").is(current.getMajorId()).and("cohort").is(current.getCohort())
                 .and("semesters").is(current.getSemesters())
                 .and("specializations").is(current.getSpecializations()));
         Date publishedAt = new Date();
         ObjectId publishedBy = actor();
-        Update publishUpdate = new Update().set("status", "ACTIVE")
+        Update publishUpdate = new Update().set("status", "ACTIVE").inc("revision", 1)
             .set("publicationAudit.publishedAt", publishedAt)
             .set("publicationAudit.publishedBy", publishedBy)
             .set("publicationAudit.validationPassed", true)

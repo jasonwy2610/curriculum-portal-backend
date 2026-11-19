@@ -16,6 +16,7 @@ import vn.edu.huflit.portal.academic.repository.AcademicRecordRepository;
 import vn.edu.huflit.portal.replacement.service.ReplacementApplicability;
 
 import java.time.Instant;
+import vn.edu.huflit.portal.curriculum.service.CurriculumTracks;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -44,9 +45,19 @@ public class StudentCurriculumController {
  @GetMapping
  public ResponseEntity<ApiResponse<Map<String,Object>>> getMyCurriculum(@AuthenticationPrincipal User user) {
    if (user.getCurriculumId()==null) throw new IllegalArgumentException("Tài khoản chưa được gán CTĐT");
-   Curriculum c=curriculumRepository.findById(user.getCurriculumId())
+   Curriculum storedCurriculum=curriculumRepository.findById(user.getCurriculumId())
        .orElseThrow(()->new IllegalArgumentException("Không tìm thấy CTĐT áp dụng"));
+   Curriculum c = CurriculumTracks.forStudent(storedCurriculum, user);
+   final Curriculum selectedCurriculum=c;
    Map<String,Object> official = curriculumEvaluationService.evaluateOfficial(user);
+   @SuppressWarnings("unchecked")
+   List<Map<String,Object>> progress=(List<Map<String,Object>>)official.get("groupProgress");
+   Set<String> electiveCodes=c.getRequirementGroups().stream()
+       .filter(g->g.getKind()!=null && g.getKind().startsWith("ELECTIVE"))
+       .flatMap(g->safe(g.getEligibleCourseCodes()).stream()).collect(Collectors.toSet());
+   boolean electiveGroupComplete=progress.stream()
+       .filter(g->String.valueOf(g.get("kind")).startsWith("ELECTIVE"))
+       .anyMatch(g->Boolean.TRUE.equals(g.get("complete")));
    Map<String,Boolean> passedByCode=new HashMap<>();
    Map<String,AcademicRecord> ownResults=new HashMap<>();
    // Kết quả môn thay thế có thể được ghi nhận dưới CTĐT mới: tìm theo sinh viên, không giới hạn curriculumId.
@@ -63,7 +74,7 @@ public class StudentCurriculumController {
    Curriculum next=null;
    if (nextYear!=null && c.getMajorId()!=null) {
      next=curriculumRepository.findAll().stream()
-         .filter(x->c.getMajorId().equals(x.getMajorId()) && nextYear.equals(x.getAppliedYear()))
+         .filter(x->selectedCurriculum.getMajorId().equals(x.getMajorId()) && nextYear.equals(x.getAppliedYear()))
          .filter(x->!"DRAFT".equalsIgnoreCase(x.getStatus()) && !"INACTIVE".equalsIgnoreCase(x.getStatus()))
          .max(Comparator.comparing(x->x.getVersion()==null?0:x.getVersion())).orElse(null);
    }
@@ -74,11 +85,16 @@ public class StudentCurriculumController {
    @SuppressWarnings("unchecked")
    List<String> recognizedRuleIds =
        (List<String>) official.getOrDefault("recognizedReplacementRuleIds", List.of());
+   @SuppressWarnings("unchecked")
+   List<Map<String,Object>> historicalEvidence =
+       (List<Map<String,Object>>) official.getOrDefault("historicalRecognitionEvidence", List.of());
    Instant now = Instant.now();
    Map<String,List<ReplacementRule>> rulesByOld = new HashMap<>();
+   Set<String> currentRuleIds = new HashSet<>();
    for (var window : applicability.windows(user, c, now)) {
      ReplacementRule rule = window.rule();
-     if (!window.contains(now) && !recognizedRuleIds.contains(rule.getId().toHexString())) continue;
+     if (window.verifies(now)) currentRuleIds.add(rule.getId().toHexString());
+     if (!window.verifies(now) && !recognizedRuleIds.contains(rule.getId().toHexString())) continue;
      for (String old : safe(rule.getOldCourseCodes())) {
        rulesByOld.computeIfAbsent(old, ignored -> new ArrayList<>()).add(rule);
      }
@@ -104,7 +120,7 @@ public class StudentCurriculumController {
        for (ReplacementRule rule:rulesByOld.getOrDefault(code,List.of())) {
          int effectiveYear=rule.getEffectiveDate().toInstant().atZone(ZoneId.systemDefault()).getYear();
          boolean allPassed=safe(rule.getNewCourseCodes()).stream().allMatch(newCode->Boolean.TRUE.equals(passedByCode.get(newCode)));
-         boolean supported=rule.getRuleType()!=null && Set.of("1-1", "1-N", "N-1").contains(rule.getRuleType());
+         boolean supported=currentRuleIds.contains(rule.getId().toHexString());
          boolean recognized=replacementPassed && recognizedRuleIds.contains(rule.getId().toHexString())
              && new HashSet<>(safe(rule.getNewCourseCodes())).equals(new HashSet<>(recognizedMap.get(code)));
          Map<String,Object> rv=new LinkedHashMap<>();
@@ -121,9 +137,38 @@ public class StudentCurriculumController {
          rv.put("applicableCohorts",safe(rule.getApplicableCohorts()));
          rv.put("recognized",recognized); rv.put("allReplacementCoursesPassed",allPassed);
          rv.put("automaticRecognitionSupported",supported);
+         if (recognized) {
+           historicalEvidence.stream()
+               .filter(snapshot -> rule.getId().toHexString().equals(snapshot.get("ruleId")))
+               .findFirst().ifPresent(snapshot -> {
+                 rv.putAll(snapshot);
+                 rv.put("historicalEvidence",true);
+               });
+         }
          rv.put("nextCurriculumCode",following==null?null:following.getCurriculumCode());
          rv.put("nextCurriculumName",following==null?null:following.getCurriculumName());
          replacementViews.add(rv);
+       }
+       // A valid entitlement remains visible even if its rule is no longer
+       // available in the current tree/timeline. Never fabricate historical dates.
+       if (replacementPassed && replacementViews.stream().noneMatch(v->Boolean.TRUE.equals(v.get("recognized")))) {
+         for (Map<String,Object> snapshot:historicalEvidence) {
+           @SuppressWarnings("unchecked") List<String> olds=(List<String>)snapshot.get("oldCourseCodes");
+           @SuppressWarnings("unchecked") List<String> news=(List<String>)snapshot.get("newCourseCodes");
+           if (!olds.contains(code) || !new HashSet<>(news).equals(new HashSet<>(recognizedMap.get(code)))) continue;
+           Map<String,Object> rv=new LinkedHashMap<>(snapshot);
+           rv.put("ruleType",olds.size()>1?"N-1":news.size()>1?"1-N":"1-1");
+           rv.put("newCourses",news.stream().map(newCode->{
+             Map<String,Object> item=new LinkedHashMap<>(); item.put("courseCode",newCode);
+             Course nc=catalog.get(newCode); item.put("courseName",nc==null?newCode:nc.getCourseName());
+             item.put("credits",nc==null?null:nc.getCredits());
+             item.put("passed",Boolean.TRUE.equals(passedByCode.get(newCode))); return item;
+           }).toList());
+           rv.put("recognized",true); rv.put("historicalEvidence",true);
+           rv.put("automaticRecognitionSupported",false);
+           rv.put("note","Đã công nhận theo bằng chứng lịch sử; không dùng để cấp công nhận mới.");
+           replacementViews.add(rv);
+         }
        }
        boolean isPassed=originalPassed || replacementPassed;
        List<String> prerequisites=safe(ci.getPrerequisiteCourseCodes());
@@ -152,6 +197,9 @@ public class StudentCurriculumController {
        v.put("missingPrerequisiteCourseCodes",missing);v.put("highestScore10",ar==null?null:ar.getHighestScore10());
        v.put("letterGrade",ar==null?null:ar.getHighestLetterGrade());
        v.put("status",isPassed?"PASSED":ar==null?"NOT_STUDIED":"FAILED");
+       // Preserve the actual grade status. Elective alternatives are not individual debts.
+       v.put("requiredForCompletion",!electiveCodes.contains(code));
+       v.put("electiveGroupComplete",electiveCodes.contains(code) && electiveGroupComplete);
        v.put("completedByReplacement",!originalPassed&&replacementPassed);
        v.put("replacementRules",replacementViews);courseViews.add(v);
      }
@@ -162,13 +210,20 @@ public class StudentCurriculumController {
    Map<String,Object> result=new LinkedHashMap<>();
    result.put("curriculumId",c.getId().toHexString());result.put("curriculumCode",c.getCurriculumCode());
    result.put("curriculumName",c.getCurriculumName());result.put("cohort",c.getCohort());
+   result.put("specializationCode",user.getChosenSpecializationCode());
    result.put("majorId",c.getMajorId()==null?null:c.getMajorId().toHexString());result.put("version",c.getVersion());
    result.put("appliedYear",c.getAppliedYear());result.put("requiredCredits",official.get("requiredCredits"));
    result.put("nextCurriculumCode",following==null?null:following.getCurriculumCode());
-   int requiredCredits=c.resolvedTotalCredits()==null?0:c.resolvedTotalCredits();
-   Integer configuredMandatory=c.resolvedMandatoryCredits();
+   int requiredCredits=((Number)official.get("requiredCredits")).intValue();
+   Integer configuredMandatory=c.getRequirementGroups().stream()
+       .filter(group -> group.getKind()!=null && group.getKind().startsWith("MANDATORY")
+           && !Boolean.FALSE.equals(group.getCountsTowardGraduation()))
+       .mapToInt(group -> group.getRequiredCredits()==null?0:group.getRequiredCredits()).sum();
    boolean creditPlanValid=requiredCredits>0 && configuredMandatory!=null && configuredMandatory>=0 && configuredMandatory<=requiredCredits;
-   Integer electiveQuota=creditPlanValid?requiredCredits-configuredMandatory:null;
+   Integer electiveQuota=c.getRequirementGroups().stream()
+       .filter(g->g.getKind()!=null && g.getKind().startsWith("ELECTIVE")
+           && !Boolean.FALSE.equals(g.getCountsTowardGraduation()))
+       .mapToInt(g->g.getRequiredCredits()==null?0:g.getRequiredCredits()).sum();
    // Khong tinh tien do neu chi tieu bat buoc chua duoc cau hinh.
    int recognizedCredits=((Number)official.get("recognizedCredits")).intValue();
    requiredCredits=((Number)official.get("requiredCredits")).intValue();

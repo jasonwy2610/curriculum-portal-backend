@@ -20,6 +20,18 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class AdminStudentLookupController {
     private final MongoTemplate mongoTemplate;
+    private final vn.edu.huflit.portal.academic.service.StudentCurriculumAssignmentService assignmentService;
+
+    public record AssignmentRequest(String curriculumId, String chosenSpecializationCode) {}
+
+    @PutMapping("/{studentId}/curriculum-assignment")
+    public ResponseEntity<ApiResponse<Map<String,String>>> assign(@PathVariable String studentId,
+        @RequestBody AssignmentRequest request) {
+        User saved = assignmentService.assign(studentId, request.curriculumId(), request.chosenSpecializationCode());
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("studentId", saved.getId().toHexString(),
+            "curriculumId", saved.getCurriculumId().toHexString(),
+            "chosenSpecializationCode", saved.getChosenSpecializationCode())));
+    }
 
     @GetMapping("/count")
     public ResponseEntity<ApiResponse<Map<String, Long>>> count() {

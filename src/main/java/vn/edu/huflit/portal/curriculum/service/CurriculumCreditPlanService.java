@@ -20,7 +20,7 @@ public class CurriculumCreditPlanService {
 
     public Optional<CreditPlan> calculate(Curriculum curriculum) {
         List<Curriculum.RequirementGroupItem> groups = curriculum.getRequirementGroups();
-        if (groups == null || groups.isEmpty()) return Optional.empty();
+        if ((groups == null || groups.isEmpty()) && CurriculumTracks.trees(curriculum).isEmpty()) return Optional.empty();
         Map<String,Integer> credits = courseRepository.findAll().stream()
             .filter(c -> c.getCourseCode() != null && c.getCredits() != null && c.getCredits() > 0)
             .collect(Collectors.toMap(Course::getCourseCode, Course::getCredits, (a,b)->a));
@@ -32,6 +32,11 @@ public class CurriculumCreditPlanService {
         Integer uniformMandatory = null, uniformElective = null;
         Map<String,Integer> mandatoryByTrack = new LinkedHashMap<>();
         for (String track : tracks) {
+            Curriculum selected;
+            try { selected = CurriculumTracks.select(curriculum, track); }
+            catch (IllegalArgumentException | IllegalStateException ex) { return Optional.empty(); }
+            groups = selected.getRequirementGroups();
+            if (groups.isEmpty()) return Optional.empty();
             int mandatory = 0, elective = 0;
             Set<String> mandatoryCodes = new HashSet<>();
             for (Curriculum.RequirementGroupItem group : groups) {

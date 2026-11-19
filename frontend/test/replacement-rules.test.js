@@ -7,7 +7,7 @@ import {ruleWindows, ruleStatus, replacementCourses, vietnamDateTimeInput, vietn
 const before = '2026-12-01T00:00:00.000Z';
 const transition = '2026-12-02T00:00:00.000Z';
 const end = '2026-12-03T00:00:00.000Z';
-const first = {id: 'a', status: 'ACTIVE', lifecycleStatus: 'PUBLISHED', versionNumber: 1,
+const first = {id: 'a', ruleType: '1-1', status: 'ACTIVE', lifecycleStatus: 'PUBLISHED', versionNumber: 1,
   publishedAt: before, effectiveDate: before, majorId: 'major', applicableCohorts: ['K2024'],
   oldCourseCodes: ['OLD'], newCourseCodes: ['NEW']};
 const next = {...first, id: 'b', ruleFamilyId: 'a', versionNumber: 2,
@@ -37,8 +37,8 @@ test('scheduled and retired versions use precise start and exclusive end times',
 
 test('replacement selection uses the actual completion moment and applicable cohort', () => {
   const semester = {courses: [{courseCode: 'OLD', specializationCodes: ['IT']}]};
-  const curriculum = {semesters: [semester]};
-  const student = {majorId: 'major', cohort: 'K2024', chosenSpecializationCode: 'IT'};
+  const curriculum = {id: 'assigned', majorId: 'major', cohort: 'K2024', semesters: [semester]};
+  const student = {curriculumId: 'assigned', majorId: 'major', cohort: 'K2024', chosenSpecializationCode: 'IT'};
   assert.deepEqual([...replacementCourses([first, next], student, curriculum, semester, before)], ['NEW']);
   assert.equal(replacementCourses([first, next], student, curriculum, semester, transition).size, 0);
   assert.equal(replacementCourses([first], {...student, chosenSpecializationCode: 'OTHER'},

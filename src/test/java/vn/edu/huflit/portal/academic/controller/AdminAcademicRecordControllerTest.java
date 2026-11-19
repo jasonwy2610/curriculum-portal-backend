@@ -35,6 +35,7 @@ class AdminAcademicRecordControllerTest {
         var student = User.builder().id(new ObjectId()).curriculumId(new ObjectId()).majorId(new ObjectId())
             .role("STUDENT").cohort("K2024").build();
         var curriculum = Curriculum.builder().id(student.getCurriculumId())
+            .majorId(student.getMajorId()).cohort(student.getCohort())
             .semesters(List.of(Curriculum.SemesterItem.builder().courses(List.of(
                 Curriculum.CurriculumCourseItem.builder().courseCode("OLD").build())).build())).build();
         Instant start = Instant.parse("2024-06-01T00:00:00Z");

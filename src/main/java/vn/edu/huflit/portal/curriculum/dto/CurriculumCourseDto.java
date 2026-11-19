@@ -18,6 +18,10 @@ public class CurriculumCourseDto {
     private Integer credits;
     private String type; // "MANDATORY" | "ELECTIVE"
     private String knowledgeGroupCode;
+    private String requirementGroupCode;
+    private Boolean countsTowardGraduation;
+    private Boolean countsTowardGpa;
+    private String completionType;
 
     @Builder.Default
     private List<String> specializationCodes = new ArrayList<>();

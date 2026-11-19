@@ -9,6 +9,7 @@ import vn.edu.huflit.portal.entity.User;
 import vn.edu.huflit.portal.replacement.repository.ReplacementRuleRepository;
 
 import java.time.Instant;
+import vn.edu.huflit.portal.curriculum.service.CurriculumTracks;
 import java.util.*;
 
 @Component
@@ -36,14 +37,27 @@ public class ReplacementApplicability {
     }
 
     public List<Window> windows(User student, Curriculum curriculum, Instant asOf) {
-        if (student == null || student.getMajorId() == null
-            || student.getCohort() == null || student.getCohort().isBlank()) return List.of();
-        Set<String> originals = curriculum == null ? Set.of() : curriculumCourses(curriculum, student);
+        if (student == null || curriculum == null || student.getCurriculumId() == null) return List.of();
+        Curriculum selected = CurriculumTracks.forStudent(curriculum, student);
+        Set<String> originals = curriculumCourses(selected, student);
+        Set<String> electives = new HashSet<>(), mandatory = new HashSet<>();
+        for (var group : safe(selected.getRequirementGroups())) {
+            if (group.getKind() != null && group.getKind().startsWith("ELECTIVE"))
+                electives.addAll(safe(group.getEligibleCourseCodes()));
+            if (group.getKind() != null && group.getKind().startsWith("MANDATORY"))
+                mandatory.addAll(safe(group.getEligibleCourseCodes()));
+        }
+        for (var semester : safe(selected.getSemesters())) for (var course : safe(semester.getCourses())) {
+            if ("ELECTIVE".equals(course.getType())) electives.add(course.getCourseCode());
+            if ("MANDATORY".equals(course.getType())) mandatory.add(course.getCourseCode());
+        }
         return timeline(repository.findAll()).stream().filter(window -> {
             ReplacementRule rule = window.rule();
-            return !window.start().isAfter(asOf) && student.getMajorId().equals(rule.getMajorId())
+            return supportedShape(rule) && !window.start().isAfter(asOf) && student.getMajorId().equals(rule.getMajorId())
                 && safe(rule.getApplicableCohorts()).contains(student.getCohort())
-                && (curriculum == null || originals.containsAll(safe(rule.getOldCourseCodes())));
+                && originals.containsAll(safe(rule.getOldCourseCodes()))
+                && (Collections.disjoint(rule.getOldCourseCodes(), mandatory)
+                    || Collections.disjoint(rule.getNewCourseCodes(), electives));
         }).toList();
     }
 
@@ -82,7 +96,17 @@ public class ReplacementApplicability {
 
     public List<ReplacementRule> current(User student, Curriculum curriculum, Instant now) {
         return windows(student, curriculum, now).stream()
-            .filter(window -> window.contains(now)).map(Window::rule).toList();
+            .filter(window -> window.verifies(now)).map(Window::rule).toList();
+    }
+
+    private static boolean supportedShape(ReplacementRule rule) {
+        List<String> olds = safe(rule.getOldCourseCodes()), news = safe(rule.getNewCourseCodes());
+        if (olds.stream().anyMatch(c -> c == null || c.isBlank()) || news.stream().anyMatch(c -> c == null || c.isBlank())
+            || new HashSet<>(olds).size() != olds.size() || new HashSet<>(news).size() != news.size()
+            || !Collections.disjoint(olds, news)) return false;
+        return ("1-1".equals(rule.getRuleType()) && olds.size() == 1 && news.size() == 1)
+            || ("1-N".equals(rule.getRuleType()) && olds.size() == 1 && news.size() > 1)
+            || ("N-1".equals(rule.getRuleType()) && olds.size() > 1 && news.size() == 1);
     }
 
     private static Instant startsAt(ReplacementRule rule) {

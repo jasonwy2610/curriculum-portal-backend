@@ -17,7 +17,7 @@ import java.util.Date;
 import java.util.List;
 
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "curriculums")
@@ -25,6 +25,9 @@ public class Curriculum {
 
     @Id
     private ObjectId id;
+
+    // Compare-and-set generation, including legacy documents where this field is absent.
+    private Long revision;
 
     @Indexed(unique = true)
     private String curriculumCode;
@@ -125,7 +128,17 @@ public class Curriculum {
     @Builder.Default
     private List<RequirementGroupItem> requirementGroups = new ArrayList<>();
 
+    // Each tree references the shared course catalogue by courseCode.
+    @Builder.Default
+    private java.util.Map<String, SpecializationTree> specializationTrees = new java.util.LinkedHashMap<>();
+
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class SpecializationTree {
+        @Builder.Default private List<SemesterItem> semesters = new ArrayList<>();
+        @Builder.Default private List<RequirementGroupItem> requirementGroups = new ArrayList<>();
+    }
+
+    @Data @Builder(toBuilder = true) @NoArgsConstructor @AllArgsConstructor
     public static class RequirementGroupItem {
         private String groupCode;
         private String groupName;
@@ -185,7 +198,7 @@ public class Curriculum {
     }
 
     @Data
-    @Builder
+    @Builder(toBuilder = true)
     @NoArgsConstructor
     @AllArgsConstructor
     public static class CurriculumCourseItem {

@@ -1,3 +1,4 @@
+import {selectCurriculumTrack} from './curriculum-tracks.js';
 export const ruleStatuses = {
   DRAFT: 'Bản nháp',
   SCHEDULED: 'Chờ hiệu lực',
@@ -64,7 +65,12 @@ export function vietnamDateTimeIso(value) {
 
 export function replacementCourses(rules, student, curriculum, semester, completedAt) {
   const at = Date.parse(completedAt);
-  if (!student || !curriculum || !semester || !Number.isFinite(at)) return new Set();
+  if (!student?.curriculumId || !curriculum || !semester || !Number.isFinite(at)
+    || curriculum.id !== student.curriculumId || curriculum.majorId !== student.majorId
+    || !student.majorId || !student.cohort || curriculum.cohort !== student.cohort
+    || curriculum.status === 'DRAFT') return new Set();
+  try { curriculum = selectCurriculumTrack(curriculum,student.chosenSpecializationCode); }
+  catch { return new Set(); }
   const matchesSpecialization = codes => !codes?.length || codes.includes(student.chosenSpecializationCode);
   const programCodes = new Set((curriculum.semesters ?? []).flatMap(item => (item.courses ?? [])
     .filter(course => matchesSpecialization(course.specializationCodes)).map(course => course.courseCode)));
@@ -76,10 +82,29 @@ export function replacementCourses(rules, student, curriculum, semester, complet
     }
   }
   const semesterCodes = new Set((semester.courses ?? []).map(course => course.courseCode));
+  const electives = new Set(), mandatory = new Set();
+  for (const semester of curriculum.semesters ?? []) for (const course of semester.courses ?? []) {
+    if (course.type === 'ELECTIVE') electives.add(course.courseCode);
+    if (course.type === 'MANDATORY') mandatory.add(course.courseCode);
+  }
+  for (const group of curriculum.requirementGroups ?? []) {
+    const pool = group.kind?.startsWith('ELECTIVE') ? electives : group.kind?.startsWith('MANDATORY') ? mandatory : null;
+    for (const code of group.eligibleCourseCodes ?? []) pool?.add(code);
+  }
+  const supported = rule => {
+    const olds = rule.oldCourseCodes ?? [], news = rule.newCourseCodes ?? [];
+    if ([...olds, ...news].some(code => typeof code !== 'string' || !code.trim())
+      || new Set(olds).size !== olds.length || new Set(news).size !== news.length
+      || olds.some(code => news.includes(code))) return false;
+    return (rule.ruleType === '1-1' && olds.length === 1 && news.length === 1)
+      || (rule.ruleType === '1-N' && olds.length === 1 && news.length > 1)
+      || (rule.ruleType === 'N-1' && olds.length > 1 && news.length === 1);
+  };
   const windows = ruleWindows(rules);
-  return new Set(rules.filter(rule => rule.publishedAt && rule.majorId === student.majorId
+  return new Set(rules.filter(rule => supported(rule) && rule.publishedAt && rule.majorId === student.majorId
     && rule.applicableCohorts?.includes(student.cohort) && rule.oldCourseCodes?.length
     && rule.oldCourseCodes.every(code => programCodes.has(code))
+    && !(rule.oldCourseCodes.some(code => mandatory.has(code)) && rule.newCourseCodes.some(code => electives.has(code)))
     && rule.oldCourseCodes.some(code => semesterCodes.has(code))
     && ruleStatus(rule, windows, at) === 'ACTIVE').flatMap(rule => rule.newCourseCodes ?? []));
 }

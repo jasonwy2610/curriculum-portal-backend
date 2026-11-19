@@ -46,8 +46,9 @@ public class CurriculumEvaluationService {
     private Map<String, Object> evaluateInternal(User student, boolean persistEvidence) {
         if (student == null || student.getCurriculumId() == null)
             throw new IllegalArgumentException("Sinh viên chưa được gán CTĐT");
-        Curriculum curriculum = curricula.findById(student.getCurriculumId())
+        Curriculum storedCurriculum = curricula.findById(student.getCurriculumId())
             .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy CTĐT"));
+        Curriculum curriculum = CurriculumTracks.forStudent(storedCurriculum, student);
         if (curriculum.getRequirementGroups() == null || curriculum.getRequirementGroups().isEmpty())
             throw new IllegalStateException("CTĐT chưa cấu hình requirementGroups; cần chuyển đổi dữ liệu trước khi xét tiến độ");
         String specialization = student.getChosenSpecializationCode();
@@ -97,6 +98,17 @@ public class CurriculumEvaluationService {
             .filter(r -> passFailConfigured.contains(r.getCourseCode())
                 && "PASSED".equalsIgnoreCase(r.getStatus()))
             .map(AcademicRecord::getCourseCode).collect(Collectors.toSet());
+        if (curriculum.getRequirementGroups().stream()
+            .filter(g -> g.getKind() != null && g.getKind().startsWith("ELECTIVE")).count() > 1)
+            throw new IllegalStateException("Mỗi cây chỉ được có một nhóm tự chọn chung");
+        Map<String, Instant> firstPassedAt = new HashMap<>();
+        Set<String> uncertainFirstPass = new HashSet<>();
+        passingAttempts.forEach((code, attempts) -> {
+            if (attempts.stream().anyMatch(a -> a.getCompletedAt() == null)) uncertainFirstPass.add(code);
+            attempts.stream().map(AcademicRecord.AttemptItem::getCompletedAt).filter(Objects::nonNull)
+                .map(Date::toInstant).filter(at -> !at.isAfter(asOf)).min(Instant::compareTo)
+                .ifPresent(at -> firstPassedAt.put(code, at));
+        });
         // Replacement recognition preview. Never infer a historical entitlement from
         // a rule whose effective date or scope cannot be established.
         Map<String, List<String>> replacementForOld = new TreeMap<>();
@@ -107,6 +119,7 @@ public class CurriculumEvaluationService {
         List<String> historyVerificationRequired = new ArrayList<>();
         List<String> invalidHistoricalEvidenceIds = new ArrayList<>();
         List<Map<String,Object>> recognitionEvidence = new ArrayList<>();
+        List<Map<String,Object>> historicalRecognitionEvidence = new ArrayList<>();
         List<RecognitionEvidence> historicalEvidence = evidenceRepository.findByStudentIdAndCurriculumId(
             student.getId(), curriculum.getId());
         // Historical entitlements are append-only, but malformed or conflicting records
@@ -115,6 +128,7 @@ public class CurriculumEvaluationService {
         Set<String> historicalOriginals = new HashSet<>();
         Set<ObjectId> historicalRuleIds = new LinkedHashSet<>();
         Set<ObjectId> recognizedFamilies = new HashSet<>();
+        List<ReplacementApplicability.Window> applicableWindows = applicability.windows(student, curriculum, asOf);
         for (RecognitionEvidence item : historicalEvidence.stream()
                 .sorted(Comparator.comparing(RecognitionEvidence::getRecognizedAt, Comparator.nullsLast(Date::compareTo))
                     .thenComparing(RecognitionEvidence::getId, Comparator.nullsLast(ObjectId::compareTo))).toList()) {
@@ -145,15 +159,28 @@ public class CurriculumEvaluationService {
             historicalOriginals.addAll(olds);
             claimedReplacementCourses.addAll(news);
             claimedAttemptIds.addAll(evidenceAttemptIds);
+            Map<String,Object> snapshot = new LinkedHashMap<>();
+            snapshot.put("ruleId", item.getRuleId().toHexString());
+            snapshot.put("oldCourseCodes", olds); snapshot.put("newCourseCodes", news);
+            snapshot.put("attemptIds", item.getAttemptIds()); snapshot.put("grade4", item.getGrade4());
+            snapshot.put("versionNumber", item.getVersionNumber()); snapshot.put("recognizedAt", item.getRecognizedAt());
+            historicalRecognitionEvidence.add(snapshot);
             for (String old : olds) {
                 // Direct completion always wins, but evidence remains unchanged.
                 if (bestScore.getOrDefault(old, -1.0) >= 4.0 || nonNumericPassed.contains(old)) continue;
                 replacementForOld.put(old, news);
                 replacementGrade4ForOld.put(old, item.getGrade4());
+                // The stored strongest attempt does not establish the first eligible pass.
+                // Reconstruct chronology only when the historical window is available.
+                applicableWindows.stream().filter(w -> w.rule().getId().equals(item.getRuleId()))
+                    .findFirst().ifPresent(w -> {
+                        Instant first = replacementFirstPass(news, passingAttempts, w, asOf);
+                        if (first != null) firstPassedAt.put(old, first);
+                    });
             }
         }
         Map<ObjectId, List<ReplacementApplicability.Window>> versionsByFamily = new LinkedHashMap<>();
-        for (var window : applicability.windows(student, curriculum, asOf)) {
+        for (var window : applicableWindows) {
             ObjectId family = ReplacementApplicability.family(window.rule());
             if (!recognizedFamilies.contains(family))
                 versionsByFamily.computeIfAbsent(family, ignored -> new ArrayList<>()).add(window);
@@ -244,9 +271,11 @@ public class CurriculumEvaluationService {
                 evidence.put("completedAt", completedAt);
                 recognitionEvidence.add(evidence);
                 recognizedRuleIds.add(rule.getId());
+                Instant firstReplacementPass = replacementFirstPass(news, passingAttempts, window, asOf);
                 for (String old : olds) {
                     replacementForOld.put(old, news);
                     replacementGrade4ForOld.put(old, representativeGrade4);
+                    if (firstReplacementPass != null) firstPassedAt.put(old, firstReplacementPass);
                 }
                 claimedReplacementCourses.addAll(news);
                 claimedAttemptIds.addAll(attemptIds.values());
@@ -306,6 +335,9 @@ public class CurriculumEvaluationService {
                 graduationReplacements.put(old, sources);
         });
         passed.addAll(graduationReplacements.keySet());
+        Set<String> mandatoryFootprint = new HashSet<>(reservedMandatory);
+        reservedMandatory.forEach(code -> mandatoryFootprint.addAll(graduationReplacements.getOrDefault(code, List.of())));
+        List<String> electiveHistoryIssues = new ArrayList<>();
         List<List<List<String>>> choices = new ArrayList<>();
         for (Curriculum.RequirementGroupItem group : active) {
             String kind = group.getKind();
@@ -328,9 +360,17 @@ public class CurriculumEvaluationService {
                 choices.add(alternatives);
             } else {
                 List<String> eligible = unique(group.getEligibleCourseCodes()).stream()
-                    .filter(c -> passed.contains(c) && !reservedMandatory.contains(c))
+                    .filter(c -> passed.contains(c) && !mandatoryFootprint.contains(c)
+                        && Collections.disjoint(graduationReplacements.getOrDefault(c, List.of()), mandatoryFootprint))
                     .collect(Collectors.toList());
-                choices.add(electiveOptions(eligible, creditByCode, quota));
+                List<String> unknown = eligible.stream().filter(c -> !firstPassedAt.containsKey(c)
+                    || uncertainFirstPass.contains(c)).toList();
+                boolean needsOrder = eligible.stream().mapToInt(c -> credits(c, creditByCode)).sum() > quota;
+                if (needsOrder) electiveHistoryIssues.addAll(unknown);
+                // Dates only decide membership when surplus credit requires a cutoff.
+                // Never invent that cutoff, or block a group with no surplus.
+                choices.add(List.of(!needsOrder || unknown.isEmpty()
+                    ? electivePrefix(eligible, creditByCode, quota, firstPassedAt, graduationReplacements) : List.of()));
             }
         }
         // Allocate original course codes and the actual courses backing them together.
@@ -419,6 +459,7 @@ public class CurriculumEvaluationService {
         result.put("recognizedReplacements", replacementForOld);
         result.put("recognizedReplacementRuleIds", recognizedRuleIds.stream().map(ObjectId::toHexString).toList());
         result.put("replacementRecognitionEvidencePreview", recognitionEvidence);
+        result.put("historicalRecognitionEvidence", historicalRecognitionEvidence);
         result.put("historicalRecognitionSnapshotsPersisted", persistEvidence && historyVerificationRequired.isEmpty()
             && invalidHistoricalEvidenceIds.isEmpty());
         result.put("unsupportedComplexRuleIds", skippedComplexRules);
@@ -439,6 +480,7 @@ public class CurriculumEvaluationService {
         result.put("passFailVerificationRequired", !unresolvedPassFail.isEmpty());
         result.put("unverifiedPassFailCourseCodes", unresolvedPassFail);
         result.put("historicalEvidenceIssues", historyVerificationRequired);
+        result.put("electiveHistoryVerificationRequiredCourseCodes", electiveHistoryIssues);
         result.put("invalidHistoricalEvidenceIds", invalidHistoricalEvidenceIds);
         result.put("recognizedPassedCoursesGpaPreview", gpaCredits == 0 ? null :
             Math.round((weightedGradePoints / gpaCredits) * 100.0) / 100.0);
@@ -468,6 +510,9 @@ public class CurriculumEvaluationService {
         semesterTotals.forEach((semester, totals) -> semesterGpa.put(semester,
             totals[1] == 0 ? null : Math.round(totals[0] / totals[1] * 100.0) / 100.0));
         result.put("semesterGpa4", semesterGpa);
+        Map<String,Integer> semesterGpaCredits = new TreeMap<>();
+        semesterTotals.forEach((semester, totals) -> semesterGpaCredits.put(semester, (int)totals[1]));
+        result.put("semesterGpaCredits", semesterGpaCredits);
         return result;
     }
 
@@ -489,25 +534,37 @@ public class CurriculumEvaluationService {
     private static List<String> unique(List<String> codes) {
         return codes == null ? List.of() : codes.stream().filter(Objects::nonNull).distinct().sorted().collect(Collectors.toList());
     }
-    /** All feasible subsets (including empty), sorted for reproducible tie-breaking. */
-    private static List<List<String>> electiveOptions(List<String> eligible, Map<String,Integer> catalog, int quota) {
-        List<List<String>> options = new ArrayList<>();
-        enumerateElectives(eligible, 0, quota, 0, catalog, new ArrayList<>(), options);
-        options.sort(Comparator.comparing(list -> String.join("|", list)));
-        return options;
+    private static List<String> electivePrefix(List<String> eligible, Map<String,Integer> catalog,
+        int quota, Map<String,Instant> firstPassedAt, Map<String,List<String>> replacements) {
+        List<String> selected = new ArrayList<>();
+        int sum = 0;
+        for (String code : eligible.stream().sorted(Comparator
+                .comparing((String c) -> firstPassedAt.get(c), Comparator.nullsLast(Instant::compareTo))
+                .thenComparing(Comparator.naturalOrder())).toList()) {
+            if (sum >= quota) break;
+            // A direct course and an alias backed by that course are alternatives.
+            // Explicit N-1 originals can still be recognized together by their rule.
+            if (selected.stream().anyMatch(previous -> replacements.getOrDefault(previous, List.of()).contains(code)
+                || replacements.getOrDefault(code, List.of()).contains(previous))) continue;
+            selected.add(code);
+            sum += credits(code, catalog);
+        }
+        return selected;
     }
 
-    private static void enumerateElectives(List<String> codes, int index, int quota, int sum,
-        Map<String,Integer> catalog, List<String> current, List<List<String>> output) {
-        if (index == codes.size()) { output.add(new ArrayList<>(current)); return; }
-        enumerateElectives(codes, index + 1, quota, sum, catalog, current, output);
-        String code = codes.get(index);
-        int credit = credits(code, catalog);
-        if (sum < quota) {
-            current.add(code);
-            enumerateElectives(codes, index + 1, quota, sum + credit, catalog, current, output);
-            current.remove(current.size() - 1);
+    private static Instant replacementFirstPass(List<String> sources,
+        Map<String,List<AcademicRecord.AttemptItem>> attempts, ReplacementApplicability.Window window, Instant asOf) {
+        Instant completed = null;
+        for (String source : sources) {
+            List<AcademicRecord.AttemptItem> passes = attempts.getOrDefault(source, List.of());
+            if (passes.stream().anyMatch(a -> a.getCompletedAt() == null)) return null;
+            Instant first = passes.stream().map(AcademicRecord.AttemptItem::getCompletedAt).filter(Objects::nonNull)
+                .map(Date::toInstant).filter(at -> !at.isAfter(asOf) && window.verifies(at))
+                .min(Instant::compareTo).orElse(null);
+            if (first == null) return null;
+            if (completed == null || first.isAfter(completed)) completed = first;
         }
+        return completed;
     }
 
     private static class Allocation {

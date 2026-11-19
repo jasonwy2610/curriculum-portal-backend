@@ -23,6 +23,14 @@ public class CurriculumController {
     private final vn.edu.huflit.portal.curriculum.service.CurriculumPublicationService publicationService;
     private final ChangeLogService changeLogService;
     private final vn.edu.huflit.portal.curriculum.service.CurriculumRequirementValidationService requirementValidationService;
+    private final vn.edu.huflit.portal.curriculum.service.CurriculumTreeService treeService;
+
+    @PutMapping("/{id}/specializations/{code}/tree")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<CurriculumResponse>> saveTree(@PathVariable String id, @PathVariable String code,
+        @RequestBody vn.edu.huflit.portal.curriculum.model.Curriculum.SpecializationTree tree) {
+        return ResponseEntity.ok(ApiResponse.ok(CurriculumResponse.fromEntity(treeService.save(id, code, tree))));
+    }
 
 
     /** Configure credit requirement groups while the curriculum is still a draft. */
