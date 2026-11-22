@@ -159,7 +159,7 @@ class AtlasReadOnlyAuditTest {
         var evaluation = new CurriculumEvaluationService(programRepo, snapshot(CourseRepository.class, courses),
             snapshot(AcademicRecordRepository.class, records), applicability, new GradeConversionServiceImpl(), snapshot(RecognitionEvidenceRepository.class, evidence));
         var transcripts = new vn.edu.huflit.portal.academic.service.StudentTranscriptService(
-            snapshot(AcademicRecordRepository.class, records), snapshot(CourseRepository.class, courses), evaluation, new GradeConversionServiceImpl());
+            snapshot(AcademicRecordRepository.class, records), snapshot(CourseRepository.class, courses), evaluation, new GradeConversionServiceImpl(), programRepo);
         int[] transcriptCounts = new int[4]; // students, attempts, missing catalog fields, GPA differences
         List<Map<String,Object>> validation = new ArrayList<>(); int validPrograms = 0, treeCount = 0, validTrees = 0;
         for (var p : programs) {

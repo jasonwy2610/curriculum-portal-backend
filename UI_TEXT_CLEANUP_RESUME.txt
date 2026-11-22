@@ -1,0 +1,499 @@
+NHẬT KÝ TẠM NGƯNG — UI TEXT CLEANUP PORTAL_HUFLIT
+Thời điểm: 22/11/2026 16:48, Asia/Saigon.
+Trạng thái hiện tại: ĐÃ TIẾP TỤC THEO YÊU CẦU VÀ HOÀN THÀNH. Phần dưới ghi lại lịch sử bàn giao; xem báo cáo kết thúc ở cuối file.
+Workspace: C:\Users\dell\OneDrive\Desktop\HK1N4\Portal_Huflit
+Nhánh: feature/student-academic
+
+MỤC TIÊU / RÀNG BUỘC
+Tinh gọn chữ KQHT trước rồi rà soát toàn bộ Admin/Sinh viên. Chỉ thay đổi nội dung hiển thị và JSX tối thiểu. Không sửa Backend, API/DTO/model, GPA, tín chỉ, tự chọn, thay thế, xét tốt nghiệp hoặc dữ liệu Atlas. Không tạo README, stage, commit, push. Giữ toàn bộ thay đổi chưa commit của các lệnh trước. Không in .env/URI/JWT secret/token.
+
+ĐÃ LÀM
+1. Kiểm tra Git, lưu hash baseline tất cả file tracked/untracked trước sửa.
+2. Hoàn tất giai đoạn KQHT: bỏ hướng dẫn dài lặp mỗi môn/kỳ; rút ngắn nhãn kỳ; giữ nhãn kỳ thực tế trên dòng tham chiếu, GPA/tín chỉ, nguồn thay thế, lịch sử, bộ lọc, Chi tiết và mọi lỗi cần xử lý. Thông báo cây chỉ xuất hiện khi có vấn đề, không xóa trường dữ liệu API.
+3. Giai đoạn KQHT đã được test/build và kiểm tra live desktop/mobile trước khi sửa các trang khác.
+4. Rà soát các trang còn lại; áp dụng 42 mục xóa/rút gọn ở giai đoạn 2. Giữ các trang/mục vốn ngắn gọn, các xác nhận nguy hiểm, cảnh báo chưa lưu, phân quyền, ngày hiệu lực, lỗi validation và hướng dẫn quan trọng.
+5. Chỉ 11 file Frontend thay đổi trong lượt này (8 nguồn, 3 kiểm thử); không có file nguồn mới. Backend, CSS, dependencies và .gitignore không thay đổi so với baseline đầu lượt.
+6. So sánh AST: 203 hook calls, 279 callback expressions và 66 hàm ngoài render không thay đổi sau khi loại trừ phần chữ hiển thị. Kiểm tra riêng 26 lời gọi xác nhận cũng giữ nguyên.
+7. Tài khoản 23dh000001@portal.local được xác minh bằng GET KQHT thật và component Vite trong context Playwright riêng: đủ 35 môn / 8 kỳ, 18 môn có điểm, 17 môn chưa có điểm; GPA 2,64; tín chỉ đạt 54, công nhận 52. TOÀN BỘ JSON API trước/sau giống nhau, gồm curriculumPlan và issues. Không gửi API ghi Atlas.
+
+FILE ĐÃ SỬA TRONG LƯỢT NÀY
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/graduation-options.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/e2e/acceptance.spec.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/ReplacementEvidenceDetails.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/StudentCurriculumSummary.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/StudentTranscript.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/student-transcript.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/test/curriculum-components.test.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/test/student-transcript.test.js
+
+KIỂM THỬ CUỐI CÙNG — ĐÃ CHẠY, KHÔNG PHẢI DỰ KIẾN
+- Frontend node --test: 71/71 đạt.
+- npm run build: đạt.
+- Maven toàn bộ: 116 test được phát hiện, 115 đạt, 1 bỏ qua audit Atlas tổng thể; Failures=0, Errors=0, BUILD SUCCESS, kết thúc 16:48:23 ngày 22/11/2026.
+- HTTP/JWT/MongoDB và E2E ghi dữ liệu chỉ dùng MongoDB cục bộ riêng.
+- Playwright toàn ứng dụng: 22/22 đạt, desktop 1920x1080 và mobile 390x844, không flaky/retry. Kịch bản có kiểm tra console/network và chiều rộng giao diện.
+- Live KQHT chỉ đọc: desktop/mobile đạt; toàn bộ response JSON trước/sau bằng nhau.
+- git diff --check đã đạt sau các chỉnh sửa; khi tiếp tục chỉ cần xác nhận lại trạng thái cuối.
+- Vòng E2E trước lần chạy cuối có lỗi vì HMR tải lại trang khi đang sửa chữ và assertion còn chờ câu cũ. Đã sửa assertion, chốt mã, chạy lại toàn bộ; kết quả cuối 22/22 đạt. Không sửa nghiệp vụ để làm test qua.
+
+BẰNG CHỨNG / LOG (TRONG target, CẦN GIỮ LẠI — KHÔNG CHẠY MAVEN CLEAN TRƯỚC KHI ĐỌC)
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-baseline.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-source-before
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-transcript-before.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-helper-before.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-stage1-frontend.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-stage1-build.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-stage1-browser.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-stage2-changes.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-review-decisions.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-logic-verification.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-confirmations.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-integrity.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-api-equality.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-frontend.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-build.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-maven.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/lenh7-browser.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/lenh7-browser-results.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/browser-artifacts
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-summary.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-summary.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-desktop.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-desktop.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-mobile.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-mobile.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-desktop-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-desktop-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-mobile-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-mobile-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-complete.diff
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-paused-status.txt
+Ảnh trước toàn trang được chụp đầu lượt này; ảnh cận học kỳ trước sửa được giữ từ lần xác minh tài khoản ngay trước đó, cùng dữ liệu không thay đổi.
+
+VIỆC CÒN LẠI KHI TIẾP TỤC
+1. Đọc nhật ký này và git status/diff; KHÔNG viết lại từ đầu, KHÔNG reset/revert.
+2. Xác nhận log Maven cuối và JSON Playwright 22/22; sao lưu log/JSON kết quả trước khi chạy một bộ E2E khác vì harness dùng tên lenh7-browser.* cố định.
+3. Chạy lại git diff --check, cập nhật hash/status cuối; không cần chạy lại toàn bộ test nếu không có thay đổi nguồn hay lỗi mới.
+4. Tổng hợp báo cáo nghiệm thu UI TEXT CLEANUP bằng dữ liệu đã có: các mục KQHT xóa/rút gọn/giữ; 42 mục giai đoạn 2 kèm lý do; danh sách trang đã rà soát; 11 file thay đổi; test; ảnh trước/sau; Git và các giới hạn. Chưa tạo báo cáo nghiệm thu cuối vì người dùng yêu cầu tạm ngưng.
+5. Không mở rộng nghiệp vụ hoặc sửa thêm chỉ để tiếp tục cho có việc.
+
+GIT / MÔI TRƯỜNG KHI TẠM NGƯNG
+Trước khi lưu nhật ký này: 40 mục pending, gồm thay đổi cũ; 0 staged. Nhật ký gốc UI_TEXT_CLEANUP_RESUME.txt là file mới được tạo theo yêu cầu lưu log của người dùng, nên sẽ xuất hiện untracked. Không commit/push.
+.env vẫn được ignore. Không có URI, secret hay token trong nhật ký.
+Backend 8080 từ lượt trước không bị sửa/khởi động lại trong lượt cleanup. Vite 5173 được khởi động phục vụ ảnh/kiểm thử. Bộ Maven/E2E vừa hoàn tất và tự dừng các dịch vụ test riêng. Khi tiếp tục phải kiểm tra lại tiến trình/cổng, không giả định vẫn chạy.
+Kiểm tra live dùng context Playwright riêng chỉ tải component KQHT và cho phép GET transcript, không dùng luồng đăng nhập hoặc GET official có thể ghi công nhận trên Atlas.
+
+
+================ BÁO CÁO KẾT THÚC SAU KHI TIẾP TỤC ================
+
+BÁO CÁO HOÀN TẤT UI TEXT CLEANUP — PORTAL_HUFLIT
+Đối chiếu kết thúc: 19:26:46 22/11/2026 (Asia/Saigon).
+Trạng thái: HOÀN THÀNH cả hai giai đoạn.
+Nhánh: feature/student-academic.
+
+TÓM TẮT
+Tinh gọn nội dung hiển thị; không thiết kế lại bố cục hoặc thay đổi nghiệp vụ. 11 file Frontend thay đổi trong đợt cleanup: 8 file nguồn và 3 file kiểm thử. Backend, API/DTO/model, CSS, dependencies và dữ liệu MongoDB không được chỉnh sửa trong đợt này. Mọi thay đổi từ các lệnh trước được giữ nguyên. Khi tiếp tục sau tạm ngưng, không sửa thêm mã nguồn: đã đối chiếu toàn bộ diff tracked và hai module untracked đã chỉnh với bản đã kiểm thử; không có sai lệch.
+
+
+I. KQHT — NỘI DUNG ĐÃ XÓA / RÚT GỌN / GIỮ
+1. Trước: Dòng dưới môn: “Kết quả tại Học kỳ ... Điểm được đối chiếu ... đây không phải yêu cầu học lại.”
+   Sau: Thay bằng nhãn ngắn “Thực tế: Học kỳ ...”.
+   Lý do: Giữ kỳ phát sinh cho môn học sớm/trễ và học lại, bỏ mô tả kỹ thuật.
+
+2. Trước: Thông báo “Kỳ dự kiến chưa có ánh xạ ...” khi cây CTĐT hợp lệ
+   Sau: Không hiển thị thông báo thành công này.
+   Lý do: Cây, danh sách môn và nhãn dự kiến/thực tế đã thể hiện đủ; dữ liệu API vẫn giữ nguyên.
+
+3. Trước: Đoạn “Đầy đủ học phần theo kế hoạch, kèm điểm từng lần học ...” ở từng kỳ
+   Sau: Xóa.
+   Lý do: Lặp lại cấu trúc bảng điểm.
+
+4. Trước: Chân bảng “Kỳ dự kiến chưa được gán năm học thực tế; không cộng tín chỉ kế hoạch ...”
+   Sau: Xóa khỏi bảng kỳ dự kiến.
+   Lý do: Không làm thay đổi dữ liệu hoặc cách tính tín chỉ.
+
+5. Trước: Chân bảng kỳ thực tế: giải thích số liệu chính thức không tính lại theo bộ lọc
+   Sau: Giữ số lần học và tín chỉ tính GPA, bỏ lời giải thích.
+   Lý do: Giữ số liệu, giảm văn bản lặp.
+
+6. Trước: Nhãn kỳ “Học kỳ dự kiến N · Năm học chưa xác định”
+   Sau: Học kỳ dự kiến N.
+   Lý do: Không suy đoán năm học; kỳ thực tế vẫn có năm học.
+
+7. Trước: Ghi chú dài phân biệt tín chỉ học tập và tốt nghiệp
+   Sau: Tín chỉ công nhận tốt nghiệp: số tín chỉ.
+   Lý do: Thẻ tín chỉ tích lũy đạt vẫn hiển thị riêng, không mất sự phân biệt.
+
+8. Trước: Phụ đề tổng quan GPA/tín chỉ, câu giới thiệu bảng điểm và mô tả kỹ thuật lịch sử
+   Sau: Bỏ đoạn lặp; giữ nhãn, số liệu, bộ lọc, “Tất cả lần học” và nút Chi tiết.
+   Lý do: Không thay đổi ngữ cảnh bộ lọc hoặc lịch sử.
+
+9. Trước: Lỗi thiếu cây, phản hồi cũ/sai cấu trúc, thiếu dữ liệu GPA
+   Sau: Giữ cảnh báo, chỉ thay “API bảng điểm” bằng “dữ liệu bảng điểm”.
+   Lý do: Đây là lỗi cần xử lý, không phải ghi chú dư thừa.
+
+II. TOÀN BỘ TRANG ĐÃ RÀ SOÁT
+1. Đăng nhập
+   Bỏ ghi chú JWT; lỗi thiếu phiên đăng nhập dùng câu hướng dẫn thử lại, giữ nguyên điều kiện kiểm tra.
+
+2. Tổng quan Admin/Sinh viên và tiêu đề chung
+   Bỏ phụ đề lặp và phụ đề thẻ thống kê; rút gọn lưu ý điểm, quy tắc và quyền Admin.
+
+3. Ngành đào tạo, Chuyên ngành, Danh mục học phần
+   Rà soát; giữ nguyên form, nhãn, dữ liệu, empty state và validation. Chỉ hưởng thay đổi phụ đề chung.
+
+4. Tạo/quản lý CTĐT, thông tin cơ bản, cây chuyên ngành, công bố
+   Rút gọn hướng dẫn; giữ bản nháp chưa hoàn chỉnh, điều kiện công bố toàn bộ, cảnh báo chưa lưu, khóa phiên bản và xác nhận xóa/sao chép.
+
+5. Phương án tốt nghiệp và Tra cứu CTĐT
+   Rút gọn hướng dẫn lặp trong card, giữ hướng dẫn động một phương án, THESIS/CAPSTONE tiếng Việt, mã, tín chỉ, học kỳ và mọi cảnh báo thiếu/trùng môn. CoursePicker và CurriculumTrackPreview không đổi logic/nội dung thiết yếu.
+
+6. Lịch sử thay đổi
+   Bỏ dòng mô tả nguồn API; giữ bảng thay đổi, tác nhân, thời gian, ID để truy vết và empty state.
+
+7. KQHT Admin, nhập điểm, sửa điểm
+   Rút gọn hướng dẫn; giữ quyền giáo vụ, kỳ thực tế, completedAt và phân biệt sửa điểm với thêm lần học.
+
+8. KQHT Sinh viên
+   Xem danh sách giai đoạn 1; giữ đầy đủ môn, điểm, số liệu và lịch sử.
+
+9. CTĐT của tôi
+   Bỏ giải thích GPA/học dư lặp, giữ tín chỉ đạt/công nhận/còn thiếu và cảnh báo không cần học tất cả môn tự chọn.
+
+10. Quy tắc thay thế Admin/Sinh viên
+   Rút gọn mô tả phạm vi và bằng chứng. ReplacementLifecycle giữ nguyên trạng thái, ngày hiệu lực/kết thúc, lý do, lịch sử và xác nhận ngừng áp dụng.
+
+11. Thông báo
+   Bỏ thuật ngữ ObjectId khỏi hướng dẫn người nhận; giữ phạm vi sinh viên đã chọn, nội dung thông báo và trạng thái đọc.
+
+12. CoursePicker, AcademicIdentity, lỗi API dùng chung
+   Rà soát và giữ nguyên các nội dung ngắn cần thiết; không sửa logic, xử lý lỗi, log hoặc phân quyền.
+
+III. DANH SÁCH CHI TIẾT 42 MỤC GIAI ĐOẠN 2
+1. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: API đăng nhập không trả về token.
+   Sau: Chưa thể hoàn tất đăng nhập. Vui lòng thử lại.
+   Lý do: Giữ lỗi đăng nhập, bỏ tên API/token.
+
+2. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <div className="login-hint"><ShieldCheck size={17}/> Xác thực bảo mật bằng JWT</div>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Bỏ chi tiết triển khai JWT.
+
+3. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <p>{student?'Mọi thông tin về CTĐT và kết quả học tập được tổng hợp tại đây.':'Theo dõi và cập nhật dữ liệu đào tạo theo đúng phân quyền nghiệp vụ.'}</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Lặp tiêu đề tổng quan.
+
+4. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <small>{s.sub}</small>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Phụ đề thẻ thống kê lặp nhãn; giữ cấu hình dữ liệu sub.
+
+5. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <p>{student?'Thông tin dựa trên dữ liệu đã đồng bộ từ hệ thống.':'Đi nhanh đến các nghiệp vụ thường dùng.'}</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Các nút tác vụ đã rõ.
+
+6. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <p>{student?'Cập nhật mới nhất':'Nguyên tắc dữ liệu'}</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Lặp tiêu đề panel.
+
+7. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Điểm cao nhất qua các lần học được dùng để xác định kết quả.
+   Sau: Điểm học phần: lần học cao nhất.
+   Lý do: Giữ cách đọc điểm, rút gọn.
+
+8. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Quy tắc thay thế áp dụng theo CTĐT/khóa, không tự đăng ký môn.
+   Sau: Quy tắc thay thế theo CTĐT và khóa.
+   Lý do: Giữ phạm vi quy tắc.
+
+9. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Chỉ tài khoản Admin được cập nhật dữ liệu nghiệp vụ.
+   Sau: Chỉ Admin được cập nhật dữ liệu.
+   Lý do: Giữ cảnh báo phân quyền.
+
+10. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Kết quả học phần sử dụng điểm cao nhất trong các lần học. Sinh viên chỉ xem kết quả; thao tác ghi nhận do tài khoản giáo vụ thực hiện.
+   Sau: Điểm cao nhất theo học phần · Chỉ giáo vụ được nhập điểm.
+   Lý do: Giữ quyền nhập và cách chọn điểm.
+
+11. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Quy tắc thay thế chỉ thể hiện quan hệ giữa học phần theo chương trình/khóa. Hệ thống không tự đăng ký học phần mới thay sinh viên.
+   Sau: Phạm vi áp dụng: CTĐT và khóa tuyển sinh.
+   Lý do: Bỏ mô tả không yêu cầu hành động.
+
+12. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Học kỳ CTĐT dùng để chọn môn; năm học và học kỳ thực tế ghi nhận lần học lại. Nhập ngày giờ hoàn thành thực tế để xem các môn thay thế áp dụng tại thời điểm đó.
+   Sau: Học kỳ CTĐT để chọn môn; học kỳ thực tế để lưu điểm. Ngày hoàn thành dùng để xét thay thế.
+   Lý do: Giữ hướng dẫn completedAt và kỳ thực tế.
+
+13. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Thông báo chỉ gửi đến sinh viên đã chọn. Không nhập ObjectId thủ công.
+   Sau: Thông báo chỉ gửi đến sinh viên đã chọn.
+   Lý do: Giữ phạm vi người nhận, bỏ ObjectId.
+
+14. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <p>Thông tin thao tác được ghi nhận từ các API quản lý CTĐT và học phần.</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Bảng lịch sử đã có đủ thông tin thao tác.
+
+15. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Tín chỉ yêu cầu được hệ thống xác định theo từng cây chuyên ngành. Cấu hình chỉ tiêu nhóm và kiểm tra tại tab Cây chuyên ngành và công bố.
+   Sau: Cấu hình tín chỉ tại tab Cây chuyên ngành và công bố.
+   Lý do: Giữ chỉ dẫn điều hướng.
+
+16. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Các nhóm kiến thức, học phần và học kỳ hiện có sẽ được giữ nguyên khi chỉ cập nhật thông tin cơ bản.
+   Sau: Cập nhật thông tin cơ bản không thay đổi cây học phần.
+   Lý do: Rút gọn phạm vi của biểu mẫu.
+
+17. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Hiện hệ thống chưa hiển thị được chương trình đào tạo dành cho tài khoản này. Bạn không cần tự tạo hoặc chỉnh sửa chương trình.
+   Sau: Chưa có CTĐT hợp lệ cho tài khoản này.
+   Lý do: Giữ empty state.
+
+18. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Liên hệ phòng đào tạo hoặc quản trị viên để kiểm tra chương trình đào tạo đã được gán cho tài khoản của bạn hay chưa. Sau khi được cập nhật, hãy tải lại trang.
+   Sau: Liên hệ giáo vụ kiểm tra CTĐT đã gán, sau đó tải lại.
+   Lý do: Giữ hướng dẫn xử lý dữ liệu nguồn.
+
+19. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Chương trình đào tạo của bạn đang được nhà trường hoàn thiện dữ liệu nhóm học phần. Điểm và các lần học đã lưu không bị thay đổi. Vui lòng liên hệ quản trị viên để được kiểm tra.
+   Sau: CTĐT chưa đủ thông tin nhóm học phần. Vui lòng liên hệ giáo vụ kiểm tra.
+   Lý do: Giữ lỗi cấu hình và cách xử lý.
+
+20. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Không thể lấy kết quả đánh giá lúc này. Bạn hãy thử nhấn “Làm mới”; nếu vẫn gặp lỗi, liên hệ quản trị viên.
+   Sau: Chưa tải được tiến độ. Hãy làm mới hoặc liên hệ giáo vụ.
+   Lý do: Giữ error state và cách khôi phục.
+
+21. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Chọn ngành đào tạo trước, sau đó chọn chuyên ngành đã được tạo trong danh mục. Không cần nhập lại mã hoặc tên.
+   Sau: Chọn ngành và chuyên ngành từ danh mục.
+   Lý do: Rút gọn hướng dẫn chọn.
+
+22. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Danh sách được lấy từ cấu trúc CTĐT hiện tại. Muốn thêm hoặc chỉnh sửa học phần, sử dụng mục “Quản lý CTĐT” trong thanh điều hướng.
+   Sau: Thêm hoặc sửa học phần tại mục “Quản lý CTĐT”.
+   Lý do: Giữ đường dẫn sử dụng.
+
+23. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: Tìm sinh viên theo mã số, họ tên hoặc email, sau đó chọn học phần và lần học. Sửa điểm không tạo lần học mới.
+   Sau: Chọn sinh viên, học phần và lần học cần sửa. Sửa điểm không tạo lần học mới.
+   Lý do: Giữ phân biệt sửa điểm và nhập lần học mới.
+
+24. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/StudentCurriculumSummary.jsx
+   Trước: <p>Bạn không cần tự tạo CTĐT hoặc đăng ký chuyên ngành. Liên hệ phòng đào tạo để được kiểm tra.</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Lặp hướng dẫn liên hệ giáo vụ.
+
+25. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/StudentCurriculumSummary.jsx
+   Trước: <p className="muted">Các môn học dư và lần học không đạt vẫn được giữ trong bảng điểm. GPA hiển thị theo kết quả tính chính thức của hệ thống.</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Số tín chỉ đạt/công nhận đã hiển thị riêng.
+
+26. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+   Trước: Một phiên bản, nhiều cây chuyên ngành. Lưu bản nháp trước khi công bố toàn bộ.
+   Sau: Quản lý cây học phần theo chuyên ngành.
+   Lý do: Nhắc lưu đã có ở thanh trạng thái.
+
+27. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+   Trước: Bản nháp được phép chưa hoàn chỉnh. Chỉ tiêu bắt buộc được tổng hợp từ cây, không nhập lại ở đây.
+   Sau: Có thể lưu bản nháp chưa hoàn chỉnh.
+   Lý do: Giữ đặc tính bản nháp.
+
+28. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+   Trước: Một nhóm tự chọn chung, hoàn thành khi đủ chỉ tiêu. Các môn học dư vẫn giữ nguyên kết quả và GPA.
+   Sau: Mỗi cây có một nhóm tự chọn chung, hoàn thành khi đủ chỉ tiêu.
+   Lý do: Giữ cấu hình tự chọn, bỏ mô tả GPA ngoài thao tác.
+
+29. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+   Trước: <br/><small>Tổng chính thức được Backend kiểm tra ở bước 4.</small>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Đã có bước kiểm tra toàn bộ CTĐT.
+
+30. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+   Trước: Giữ nguyên các cờ tính của nhóm; chỉ đổi khi cấu hình yêu cầu cần thiết.
+   Sau: Chỉ thay đổi khi cần điều chỉnh yêu cầu của nhóm.
+   Lý do: Giữ cảnh báo thiết lập nâng cao.
+
+31. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+   Trước: Chỉ công bố sau khi lưu và tất cả cây vượt qua kiểm tra Backend. Không đổi phiên bản đã gắn của sinh viên.
+   Sau: Lưu bản nháp và kiểm tra tất cả cây trước khi công bố. Sinh viên giữ phiên bản đã gán.
+   Lý do: Giữ điều kiện công bố và phiên bản cố định.
+
+32. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+   Trước: <p>Với nhóm được tính vào yêu cầu tốt nghiệp, các phương án cùng đáp ứng một yêu cầu. Sinh viên không phải hoàn thành đồng thời tất cả phương án.</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Hướng dẫn động đã nêu chỉ cần một phương án.
+
+33. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+   Trước: <p>Khóa luận tốt nghiệp: hoàn thành học phần khóa luận theo CTĐT. Đồ án/Chuyên đề tốt nghiệp: hoàn thành các học phần được cấu hình trong phương án tương ứng.</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Card đã có tên phương án và danh sách môn.
+
+34. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+   Trước: Đây không phải nhóm tự chọn thông thường hoặc quy tắc thay thế học phần 1–1, 1–N, N–1.
+   Sau: Phương án tốt nghiệp độc lập với nhóm tự chọn và quy tắc thay thế.
+   Lý do: Giữ sự phân biệt nghiệp vụ.
+
+35. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+   Trước: Mã nội bộ: <b>{option.optionCode || 'Chưa đặt'}</b>. Trạng thái trên là kiểm tra sơ bộ; validation toàn CTĐT của Backend quyết định cuối cùng.
+   Sau: Mã phương án: <b>{option.optionCode || 'Chưa đặt'}</b>
+   Lý do: Giữ mã và trạng thái Hợp lệ sơ bộ, bỏ mô tả Backend/validation.
+
+36. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+   Trước: Gợi ý theo tên/mã và các môn đã thuộc nhóm tốt nghiệp trong cây. Đây là gợi ý, không phải phân loại chính thức của danh mục.
+   Sau: Gợi ý học phần tốt nghiệp. Có thể xem toàn bộ danh mục.
+   Lý do: Giữ tính gợi ý và lựa chọn xem tất cả.
+
+37. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+   Trước: Áp dụng lựa chọn vào cây đang soạn, rồi Lưu bản nháp. Không tự chuyển môn khỏi nhóm khác; xử lý cảnh báo tại cây trước khi kiểm tra toàn bộ.
+   Sau: Lưu bản nháp sau khi chọn. Kiểm tra cảnh báo trùng nhóm trước công bố.
+   Lý do: Giữ nhắc lưu và cảnh báo xung đột.
+
+38. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/graduation-options.js
+   Trước: Cần kiểm tra khả năng phân bổ đồng thời bằng Backend.
+   Sau: Kiểm tra việc dùng chung học phần trước công bố.
+   Lý do: Chỉ đổi lời cảnh báo, giữ nguyên validation.
+
+39. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/ReplacementEvidenceDetails.jsx
+   Trước: Đang áp dụng; hệ thống xét theo lần học và ngày hoàn thành thực tế
+   Sau: Đang áp dụng theo ngày hoàn thành
+   Lý do: Giữ ý nghĩa thời gian áp dụng.
+
+40. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/ReplacementEvidenceDetails.jsx
+   Trước: {rule.recognized && <p>Tín chỉ công nhận theo môn gốc; không cộng trùng môn nguồn.</p>}
+   Sau: {rule.recognized && <p>Công nhận tín chỉ theo môn gốc.</p>}
+   Lý do: Giữ cơ sở tín chỉ công nhận bằng nhãn ngắn, bỏ phần giải thích chống tính trùng.
+
+41. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/student-transcript.js
+   Trước: Vui lòng báo quản trị viên kiểm tra API bảng điểm.
+   Sau: Vui lòng báo quản trị viên kiểm tra dữ liệu bảng điểm.
+   Lý do: Giữ lỗi phản hồi và hành động khắc phục.
+
+42. C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+   Trước: <p>{student?'Theo dõi chương trình đào tạo áp dụng và tiến độ học tập của bạn.':'Quản lý dữ liệu kết quả học tập, quy tắc thay thế và thông báo.'}</p>
+   Sau: [Đã bỏ khỏi giao diện]
+   Lý do: Phụ đề chung lặp lại ở mọi trang và không đúng ngữ cảnh từng danh mục; giữ tiêu đề và nhãn vai trò.
+
+IV. CẢNH BÁO VÀ HƯỚNG DẪN ĐƯỢC GIỮ
+- Cảnh báo chưa lưu và xác nhận trước xóa/sao chép/ngừng áp dụng
+- Lỗi validation/công bố và thông báo phân quyền
+- Trạng thái DRAFT/PUBLISHED/hiệu lực, ngày kết thúc và lý do
+- Ngày hoàn thành thực tế và lý do không thể nhập/công nhận
+- Phân biệt bắt buộc/tự chọn/phương án tốt nghiệp, chỉ cần một phương án hợp lệ
+- Dữ liệu bằng chứng công nhận, lịch sử học lại, ghi chú/lý do do người dùng nhập
+- Loading, empty state, error state và hướng dẫn phục hồi
+Giữ nguyên cả 26 lời gọi xác nhận trong main.jsx, CurriculumTreeWorkspace.jsx, GraduationOptions.jsx và ReplacementLifecycle.jsx. Đối chiếu cú pháp xác nhận 203 hook calls, 279 callback expressions và 66 hàm ngoài render không đổi, ngoại trừ các chuỗi hiển thị được phép rút gọn. Không xóa log, test, điều kiện validation, lời gọi API hoặc các trường API.
+
+V. FILE THAY ĐỔI TRONG ĐỢT CLEANUP
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/GraduationOptions.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/graduation-options.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/e2e/acceptance.spec.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/CurriculumTreeWorkspace.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/ReplacementEvidenceDetails.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/StudentCurriculumSummary.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/StudentTranscript.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/main.jsx
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/src/student-transcript.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/test/curriculum-components.test.js
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/frontend/test/student-transcript.test.js
+
+File log theo yêu cầu người dùng, không phải thay đổi mã chức năng:
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/UI_TEXT_CLEANUP_RESUME.txt
+
+VI. KIỂM THỬ VÀ ĐỐI CHIẾU DỮ LIỆU
+- node --test: 71/71 đạt.
+- npm run build: thành công.
+- Maven toàn bộ: 116 test được phát hiện, 115 đạt, 1 bỏ qua audit Atlas tổng thể; Failures=0, Errors=0; BUILD SUCCESS lúc 16:48:23 ngày 22/11/2026.
+- E2E: 22/22 đạt, không unexpected/flaky/skipped, trên desktop 1920x1080 và mobile 390x844. Các kịch bản có kiểm tra Console/Network và giới hạn chiều rộng.
+- Tài khoản 23dh000001@portal.local: đủ 35 môn/8 kỳ, 18 môn có điểm, 17 môn chưa có điểm. GPA tích lũy 2,64, tín chỉ đạt 54, tín chỉ công nhận 52. Toàn bộ JSON trước/sau bằng nhau, bao gồm curriculumPlan, issues, semesters và attempts.
+- Xác minh live dùng GET transcript thật và component KQHT trên Vite trong context Playwright riêng; chặn mọi endpoint khác trên Backend Atlas. Các thử nghiệm ghi chỉ dùng MongoDB cục bộ riêng.
+- git diff --check: đã chạy lại khi tiếp tục, đạt.
+- Không chạy lại bộ kiểm thử đã đạt khi tiếp tục vì source khớp nguyên bản đã được kiểm thử; kết quả trên là bằng chứng thực tế đã lưu, không phải kết quả mới suy đoán.
+- Vòng E2E trước lần cuối có lỗi do sửa chữ trùng lúc HMR tải lại trang và một assertion còn chờ câu cũ. Đã chốt mã, cập nhật câu kỳ vọng và chạy lại toàn bộ, kết quả cuối 22/22 đạt.
+
+Log:
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-frontend.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-build.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-maven.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-browser.log
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-verified-browser.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-resumed-verification.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-api-equality.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-logic-verification.json
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-confirmations.json
+
+VII. ẢNH TRƯỚC / SAU
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-desktop.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-desktop.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-mobile.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-mobile.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-desktop-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-desktop-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-before-mobile-first-semester.png
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-cleanup-after-mobile-first-semester.png
+Ảnh trước toàn trang được chụp đầu đợt cleanup. Ảnh cận học kỳ trước sửa được giữ từ lần xác minh cùng tài khoản ngay trước đó; dữ liệu không thay đổi.
+
+VIII. GIT VÀ AN TOÀN
+Nhánh feature/student-academic. 41 mục pending, bao gồm các thay đổi chưa commit từ trước và file log tạm ngưng được người dùng yêu cầu; 0 file staged. Không stage, commit hoặc push. Không tạo README. .env vẫn được ignore. Không in hoặc ghi thông tin kết nối, secret hay token vào báo cáo. Không truy cập lại Atlas trong bước hoàn tất sau tạm ngưng.
+Trạng thái đầy đủ:
+C:/Users/dell/OneDrive/Desktop/HK1N4/Portal_Huflit/target/ui-text-final-status.txt
+
+ M frontend/e2e/acceptance.spec.js
+ M frontend/src/AcademicIdentity.jsx
+ M frontend/src/CurriculumTrackPreview.jsx
+ M frontend/src/CurriculumTreeWorkspace.jsx
+ M frontend/src/ReplacementEvidenceDetails.jsx
+ D frontend/src/StudentAssignment.jsx
+ M frontend/src/StudentCurriculumSummary.jsx
+ M frontend/src/StudentTranscript.jsx
+ M frontend/src/curriculum-tracks.js
+ M frontend/src/curriculum-ui.js
+ M frontend/src/main.jsx
+ M frontend/src/student-transcript.css
+ M frontend/src/student-transcript.js
+ M frontend/test/curriculum-components.test.js
+ M frontend/test/curriculum-ui.test.js
+ M frontend/test/student-transcript.test.js
+ M src/main/java/vn/edu/huflit/portal/academic/controller/AdminStudentLookupController.java
+ D src/main/java/vn/edu/huflit/portal/academic/service/StudentCurriculumAssignmentService.java
+ M src/main/java/vn/edu/huflit/portal/academic/service/StudentTranscriptService.java
+ M src/main/java/vn/edu/huflit/portal/curriculum/service/CurriculumRequirementValidationService.java
+ M src/main/java/vn/edu/huflit/portal/curriculum/service/CurriculumTracks.java
+ M src/main/java/vn/edu/huflit/portal/curriculum/service/PublicationRecoveryService.java
+ M src/main/java/vn/edu/huflit/portal/dto/response/StudentTranscriptResponse.java
+ M src/main/java/vn/edu/huflit/portal/studentcurriculum/controller/StudentCurriculumController.java
+ M src/test/java/vn/edu/huflit/portal/academic/controller/AcademicWorkflowHttpTest.java
+ D src/test/java/vn/edu/huflit/portal/academic/service/StudentCurriculumAssignmentTest.java
+ M src/test/java/vn/edu/huflit/portal/academic/service/StudentTranscriptServiceTest.java
+ M src/test/java/vn/edu/huflit/portal/curriculum/service/CurriculumEvaluationServiceTest.java
+ M src/test/java/vn/edu/huflit/portal/curriculum/service/CurriculumSpecializationTest.java
+ M src/test/java/vn/edu/huflit/portal/integration/AtlasReadOnlyAuditTest.java
+ M src/test/java/vn/edu/huflit/portal/integration/LocalMongoHttpIntegrationTest.java
+?? UI_TEXT_CLEANUP_RESUME.txt
+?? frontend/src/CoursePicker.jsx
+?? frontend/src/GraduationOptions.jsx
+?? frontend/src/curriculum-builder.css
+?? frontend/src/curriculum-builder.js
+?? frontend/src/graduation-options.js
+?? frontend/test/curriculum-builder.test.js
+?? frontend/test/graduation-options.test.js
+?? src/test/java/vn/edu/huflit/portal/curriculum/service/PublicationRecoveryConfigurationTest.java
+?? src/test/java/vn/edu/huflit/portal/curriculum/service/StoredStudentCurriculumTest.java
+
+
+IX. GIỚI HẠN
+- Kiểm tra API live dùng một tài khoản đã nêu, không phải audit lại 1.000 tài khoản Atlas.
+- Rà soát chữ bao phủ các component/trang hiện có; 22 E2E bao phủ các luồng chính, không phải mọi tổ hợp dữ liệu hoặc kiểm tra thủ công từng pixel của mọi màn hình.
+- Học kỳ dự kiến vẫn không được tự gán năm học khi dữ liệu chưa có ánh xạ. Không thay đổi xử lý học sớm/trễ hoặc học lại.
+- Các log/ảnh chi tiết trong target sẽ bị mất nếu chạy Maven clean. Bản báo cáo đầy đủ cũng được lưu thêm trong nhật ký gốc.

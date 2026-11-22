@@ -11,7 +11,7 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import vn.edu.huflit.portal.academic.repository.AcademicRecordRepository;
-import vn.edu.huflit.portal.academic.service.StudentCurriculumAssignmentService;
+
 import vn.edu.huflit.portal.academic.service.impl.*;
 import vn.edu.huflit.portal.changelog.service.ChangeLogService;
 import vn.edu.huflit.portal.course.model.Course;
@@ -95,19 +95,55 @@ class AcademicWorkflowHttpTest {
         var applicability = new ReplacementApplicability(rules);
         var evaluation = new CurriculumEvaluationService(curricula, catalog, records, applicability, new GradeConversionServiceImpl(), evidence);
         var academic = new AcademicRecordServiceImpl(records, new GradeConversionServiceImpl(), logs, users);
-        var validator = mock(CurriculumRequirementValidationService.class, withSettings().mockMaker(MockMakers.SUBCLASS));
-        var assignments = new StudentCurriculumAssignmentService(users, curricula, mongo, validator);
         var replacements = new ReplacementRuleServiceImpl(rules, logs, mock(NotificationRepository.class), users,
             catalog, mock(MajorRepository.class), curricula, mongo, applicability);
         mvc = MockMvcBuilders.standaloneSetup(new AdminAcademicRecordController(academic, users, curricula, catalog, applicability),
             new StudentCurriculumController(evaluation, curricula, records, catalog, applicability),
-            new AdminStudentLookupController(mongo, assignments), new ReplacementRuleController(replacements))
+            new AdminStudentLookupController(mongo), new ReplacementRuleController(replacements))
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setControllerAdvice(new GlobalExceptionHandler()).build();
         SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(student, null, List.of()));
     }
 
     @AfterEach void clearPrincipal() { SecurityContextHolder.clearContext(); }
+
+    @Test void curriculumPreviewEnrichesBothSidesAndDoesNotPersistRecognition() throws Exception {
+        when(catalog.findAll()).thenReturn(List.of("OLD","EL","EL2","NEW","HISTORY").stream()
+            .map(code->Course.builder().courseCode(code).courseName("Tên "+code).credits(3).build()).toList());
+        mvc.perform(get("/api/v1/student/curriculum/preview")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].oldCourses[0].courseName").value("Tên OLD"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses[0].learningStatus").value("NOT_STUDIED"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].recognitionState").value("NOT_RECOGNIZED"));
+        postScore("NEW","\"2024-06-01T00:00:00Z\"").andExpect(status().isOk());
+        mvc.perform(get("/api/v1/student/curriculum/preview")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses[0].courseName").value("Tên NEW"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses[0].learningStatus").value("PASSED"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].recognitionState").value("ELIGIBLE"));
+        assertTrue(storedEvidence.isEmpty());verify(evidence,never()).insert(any(RecognitionEvidence.class));
+    }
+
+    @Test void multiSourceAndMultiOriginalPresentationsKeepAllCoursesAndIndependentLearningStates() throws Exception {
+        rule.setRuleType("1-N");rule.setNewCourseCodes(List.of("NEW","HISTORY"));
+        postScore("NEW","\"2024-06-01T00:00:00Z\"").andExpect(status().isOk());
+        var failed=new AcademicRecord.AttemptItem();failed.setAttemptId("failed-source");failed.setScore10(2.0);
+        failed.setCompletedAt(Date.from(Instant.parse("2024-06-01T00:00:00Z")));failed.setSemesterCode("2024-2");
+        storedRecords.add(AcademicRecord.builder().id(new ObjectId()).studentId(student.getId()).curriculumId(curriculum.getId())
+            .courseCode("HISTORY").status("FAILED").highestScore10(2.0).attempts(List.of(failed)).build());
+        mvc.perform(get("/api/v1/student/curriculum/preview")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses.length()").value(2))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses[0].learningStatus").value("PASSED"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses[1].learningStatus").value("FAILED"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].recognitionState").value("NOT_RECOGNIZED"));
+        var tree=curriculum.getSpecializationTrees().get("AA");
+        tree.setSemesters(List.of(new Curriculum.SemesterItem(1,List.of(item("OLD","MANDATORY"),item("HISTORY","MANDATORY")))));
+        tree.setRequirementGroups(List.of(Curriculum.RequirementGroupItem.builder().groupCode("CORE").kind("MANDATORY_COMMON")
+            .requiredCredits(6).eligibleCourseCodes(List.of("OLD","HISTORY")).build()));
+        rule.setRuleType("N-1");rule.setOldCourseCodes(List.of("OLD","HISTORY"));rule.setNewCourseCodes(List.of("NEW"));
+        mvc.perform(get("/api/v1/student/curriculum/preview")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].oldCourses.length()").value(2))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].replacementRules[0].newCourses.length()").value(1));
+        assertTrue(storedEvidence.isEmpty());
+    }
 
     @Test void entryPreviewOfficialRecognitionAndHistoryAgreeAcrossHttpApis() throws Exception {
         postScore("NEW", "\"2024-06-01T00:00:00Z\"").andExpect(status().isOk())
@@ -171,17 +207,15 @@ class AcademicWorkflowHttpTest {
         verify(logs).recordChange(eq("AcademicRecord"), any(), eq("CORRECT_ATTEMPT"), anyList(), any());
     }
 
-    @Test void assignmentApiAcceptsIdenticalRetryButRejectsVersionAndTrackSwitches() throws Exception {
+    @Test void manualAssignmentApiIsGoneAndNeverTouchesMongo() throws Exception {
         String path = "/api/v1/admin/students/" + student.getId() + "/curriculum-assignment";
-        mvc.perform(put(path).contentType("application/json").content(assignment(curriculum.getId().toHexString(), "AA")))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.data.chosenSpecializationCode").value("AA"));
-        mvc.perform(put(path).contentType("application/json").content(assignment(new ObjectId().toHexString(), "AA")))
-            .andExpect(status().isBadRequest());
-        mvc.perform(put(path).contentType("application/json").content(assignment(curriculum.getId().toHexString(), "BB")))
-            .andExpect(status().isBadRequest());
+        for (String body : List.of(assignment(curriculum.getId().toHexString(), "AA"),
+                assignment(new ObjectId().toHexString(), "BB"), "{}")) {
+            mvc.perform(put(path).contentType("application/json").content(body))
+                .andExpect(status().isGone());
+        }
         verifyNoInteractions(mongo);
     }
-
     @Test void ruleListingAndEntryUseTheSameTreeAndElectiveSourcePolicy() throws Exception {
         mvc.perform(get("/api/v1/student/replacement-rules")).andExpect(status().isOk())
             .andExpect(jsonPath("$.data.length()").value(1));
@@ -206,6 +240,39 @@ class AcademicWorkflowHttpTest {
             .andExpect(jsonPath("$.data.items[0].chosenSpecializationCode").value("AA"))
             .andExpect(jsonPath("$.data.items[0].passwordHash").doesNotExist())
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("test-only-hidden-hash"))));
+    }
+
+    @Test void studentReadsGraduationOptionsOnlyFromTheStoredSpecializationWithoutRenamingCodes() throws Exception {
+        var tree = curriculum.getSpecializationTrees().get("AA");
+        var semesters = new ArrayList<>(tree.getSemesters());
+        semesters.add(new Curriculum.SemesterItem(8, List.of(item("HISTORY","MANDATORY"),item("NEW","MANDATORY"))));
+        tree.setSemesters(semesters);
+        var groups = new ArrayList<>(tree.getRequirementGroups());
+        groups.add(Curriculum.RequirementGroupItem.builder().groupCode("FINAL").kind("GRADUATION").requiredCredits(3)
+            .completionOptions(List.of(new Curriculum.CompletionOptionItem("THESIS",List.of("HISTORY")),
+                new Curriculum.CompletionOptionItem("CAPSTONE",List.of("NEW")))).build());
+        tree.setRequirementGroups(groups);
+        curriculum.setSpecializations(List.of(new Curriculum.SpecializationItem("AA","A"),new Curriculum.SpecializationItem("BB","B")));
+        curriculum.setSpecializationTrees(Map.of("AA",tree,"BB",new Curriculum.SpecializationTree(List.of(),List.of(
+            Curriculum.RequirementGroupItem.builder().groupCode("HIDDEN").kind("GRADUATION").requiredCredits(99).build()))));
+        mvc.perform(get("/api/v1/student/curriculum").param("studentId",new ObjectId().toHexString()).param("specializationCode","BB"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.specializationCode").value("AA"))
+            .andExpect(jsonPath("$.data.graduationGroups.length()").value(1))
+            .andExpect(jsonPath("$.data.graduationGroups[0].groupCode").value("FINAL"))
+            .andExpect(jsonPath("$.data.graduationGroups[0].completionOptions[0].optionCode").value("THESIS"))
+            .andExpect(jsonPath("$.data.graduationGroups[0].completionOptions[1].optionCode").value("CAPSTONE"))
+            .andExpect(jsonPath("$.data.semesters[0].courses[0].requiredForCompletion").value(true))
+            .andExpect(jsonPath("$.data.semesters[2].courses[0].requiredForCompletion").value(false));
+        var attempt = new AcademicRecord.AttemptItem(); attempt.setAttemptId("thesis"); attempt.setScore10(8.0);
+        attempt.setSemesterCode("2026-2"); attempt.setCompletedAt(Date.from(Instant.parse("2026-06-01T00:00:00Z")));
+        storedRecords.add(AcademicRecord.builder().id(new ObjectId()).studentId(student.getId()).curriculumId(curriculum.getId())
+            .courseCode("HISTORY").status("PASSED").highestScore10(8.0).attempts(List.of(attempt)).build());
+        mvc.perform(get("/api/v1/student/curriculum")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.mandatoryPassedCredits").value(0))
+            .andExpect(jsonPath("$.data.mandatoryCatalogCredits").value(3))
+            .andExpect(jsonPath("$.data.semesters[2].courses[1].graduationGroupComplete").value(true))
+            .andExpect(jsonPath("$.data.semesters[2].courses[1].requiredForCompletion").value(false));
+        verify(records,never()).save(any()); verifyNoInteractions(mongo);
     }
 
     private org.springframework.test.web.servlet.ResultActions postScore(String code, String dateJson) throws Exception {

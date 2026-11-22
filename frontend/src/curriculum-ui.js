@@ -45,30 +45,13 @@ export function treeWarnings(tree) {
     if (seen.has(c.courseCode)) warnings.push(`Học kỳ ${s.semesterNumber} · ${c.courseCode}: trùng với học kỳ ${seen.get(c.courseCode)}.`);
     seen.set(c.courseCode, s.semesterNumber);
     if (!courseRequirement(tree, c.courseCode)) warnings.push(`Học kỳ ${s.semesterNumber} · ${c.courseCode}: chưa thuộc nhóm yêu cầu.`);
-    if ((tree.requirementGroups ?? []).filter(g => g.eligibleCourseCodes?.includes(c.courseCode)
-      || g.completionOptions?.some(o => o.courseCodes?.includes(c.courseCode))).length > 1)
+    if ((tree.requirementGroups ?? []).filter(g => g.kind !== 'CONDITIONAL' && g.countsTowardGraduation !== false &&
+      (g.eligibleCourseCodes?.includes(c.courseCode) || g.completionOptions?.some(o => o.courseCodes?.includes(c.courseCode)))).length > 1)
       warnings.push(`Học kỳ ${s.semesterNumber} · ${c.courseCode}: xuất hiện trong nhiều nhóm yêu cầu.`);
   }
   if ((tree.requirementGroups ?? []).filter(g => g.kind?.startsWith('ELECTIVE')).length !== 1)
     warnings.push('Mỗi cây phải có đúng một nhóm tự chọn chung.');
   return warnings;
-}
-
-export function assignmentCandidates(programs, student) {
-  if (!student) return [];
-  return programs.filter(p => p.majorId === student.majorId && p.cohort === student.cohort
-    && (student.curriculumId ? p.id === student.curriculumId : p.status === 'ACTIVE'));
-}
-
-export function assignmentPayload(student, program, code) {
-  if (!student || !program || !code) throw new Error('Chọn sinh viên, CTĐT và chuyên ngành trước khi gán.');
-  if (!assignmentCandidates([program], student).length || !program.specializations?.some(s => s.code === code))
-    throw new Error('CTĐT hoặc chuyên ngành không phù hợp với ngành và khóa của sinh viên.');
-  if (student.chosenSpecializationCode && student.chosenSpecializationCode !== code)
-    throw new Error('Chuyên ngành đã được gán cố định.');
-  if (Object.keys(program.specializationTrees ?? {}).length && !program.specializationTrees[code])
-    throw new Error('CTĐT chưa có cây của chuyên ngành này.');
-  return {curriculumId: program.id, chosenSpecializationCode: code};
 }
 
 export function assignTreeCourse(tree, code, groupCode) {
@@ -112,6 +95,8 @@ export function treeValidationMessage(message, program) {
   let text = String(message);
   for (const spec of program?.specializations ?? []) text = text.replaceAll('[' + spec.code + ']', 'Chuyên ngành ' + spec.name);
   for (const [kind, name] of Object.entries(requirementNames)) text = text.replaceAll(kind, name);
+  text = text.replace(/(?:Phuong an|Phương án)\s+(THESIS|CAPSTONE)\b/g, (_, code) =>
+    'Phương án ' + ({THESIS:'Khóa luận tốt nghiệp', CAPSTONE:'Đồ án/Chuyên đề tốt nghiệp'})[code] + ' (' + code + ')');
   return text.replaceAll('Backend', 'Hệ thống').replaceAll('requiredCredits', 'chỉ tiêu tín chỉ').replaceAll('ELECTIVE', 'Tự chọn')
     .replaceAll('MANDATORY', 'Bắt buộc');
 }

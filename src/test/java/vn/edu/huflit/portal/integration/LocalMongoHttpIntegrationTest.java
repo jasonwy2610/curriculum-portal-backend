@@ -165,7 +165,7 @@ class LocalMongoHttpIntegrationTest {
         assertEquals(c("E2"), stored.getSpecializationTrees().get("AA").getSemesters().get(1).getCourses().getFirst().getCourseCode());
         Map<String,Object> validation = status("GET", path(draft) + "/validation", adminToken, null, 200);
         assertEquals(true, validation.get("valid"));
-        publishAndAssign(draft);
+        publishWithStoredIdentity(draft);
         status("PUT", path(draft) + "/specializations/AA/tree", adminToken, tree("AA"), 400);
         status("PUT", path(draft), adminToken, Map.of("curriculumName", "Cannot edit published"), 400);
         Map<String,Object> revision = status("POST", path(draft) + "/clone", adminToken,
@@ -175,7 +175,7 @@ class LocalMongoHttpIntegrationTest {
         status("POST", "/api/curriculums/" + nextId + "/publish", adminToken, null, 200);
         assertEquals(draft.getId(), users.findById(student.getId()).orElseThrow().getCurriculumId());
         status("PUT", "/api/v1/admin/students/" + student.getId() + "/curriculum-assignment", adminToken,
-            Map.of("curriculumId", nextId, "chosenSpecializationCode", "AA"), 400);
+            Map.of("curriculumId", nextId, "chosenSpecializationCode", "AA"), 410);
     }
 
     @Test @Order(3) void oneInvalidTreeAndWrongStudentScopeAreRejectedWithoutHistoryDeletion() throws Exception {
@@ -188,12 +188,12 @@ class LocalMongoHttpIntegrationTest {
         status("POST", path(draft) + "/publish", adminToken, null, 200);
         student.setCohort("K2025"); users.save(student);
         status("PUT", "/api/v1/admin/students/" + student.getId() + "/curriculum-assignment", adminToken,
-            Map.of("curriculumId", draft.getId().toHexString(), "chosenSpecializationCode", "AA"), 400);
+            Map.of("curriculumId", draft.getId().toHexString(), "chosenSpecializationCode", "AA"), 410);
         assertNull(users.findById(student.getId()).orElseThrow().getCurriculumId());
     }
 
     @Test @Order(4) void electivesUseFirstPassChronologyWhileHighestScoreAndSemesterGpaRemainIndependent() throws Exception {
-        var program = draft(); publishAndAssign(program);
+        var program = draft(); publishWithStoredIdentity(program);
         score(program, "C", 7, START, "2024-1", 200);
         score(program, "S", 8, START, "2024-1", 200);
         score(program, "E4", 5, START, "2024-1", 200);
@@ -214,7 +214,7 @@ class LocalMongoHttpIntegrationTest {
 
     @Test @Order(5) void publishedReplacementBundlesAndRetirementPreserveRealStoredEvidence() throws Exception {
         for (String type : List.of("1-1", "1-N", "N-1")) {
-            var program = draft(); publishAndAssignFreshStudent(program);
+            var program = draft(); publishWithFreshStoredStudent(program);
             var input = ReplacementRule.builder().majorId(major.getId()).applicableCohorts(List.of("K2024"))
                 .ruleType(type).oldCourseCodes(type.equals("N-1") ? List.of(c("C"), c("S")) : List.of(c("C")))
                 .newCourseCodes(type.equals("1-N") ? List.of(c("NEW"), c("ALT")) : List.of(c("NEW")))
@@ -250,7 +250,7 @@ class LocalMongoHttpIntegrationTest {
     }
 
     @Test @Order(6) void electiveSourcesCannotAuthorizeOutsideMandatoryReplacementEntry() throws Exception {
-        var program = draft(); publishAndAssign(program);
+        var program = draft(); publishWithStoredIdentity(program);
         var rule = ReplacementRule.builder().id(new ObjectId()).majorId(major.getId()).applicableCohorts(List.of("K2024"))
             .status("ACTIVE").lifecycleStatus("PUBLISHED").ruleType("1-N").effectiveDate(Date.from(START)).publishedAt(Date.from(START))
             .oldCourseCodes(List.of(c("C"))).newCourseCodes(List.of(c("E2"), c("NEW"))).build();
@@ -278,7 +278,7 @@ class LocalMongoHttpIntegrationTest {
     }
 
     @Test @Order(8) void supersededAndExpiredRulesKeepStoredEvidenceWithoutDoubleRecognition() throws Exception {
-        var program = draft(); publishAndAssign(program);
+        var program = draft(); publishWithStoredIdentity(program);
         var rule = rules.insert(ReplacementRule.builder().id(new ObjectId()).versionNumber(1)
             .majorId(major.getId()).applicableCohorts(List.of("K2024")).ruleType("1-1")
             .oldCourseCodes(List.of(c("C"))).newCourseCodes(List.of(c("NEW")))
@@ -316,7 +316,7 @@ class LocalMongoHttpIntegrationTest {
         String endpoint="/api/v1/student/academic-records/transcript";
         var empty=status("GET",endpoint,studentToken,null,200);
         assertTrue(((List<?>)empty.get("attempts")).isEmpty());
-        var p=draft();publishAndAssign(p);
+        var p=draft();publishWithStoredIdentity(p);
         score(p,"C",7,START,"2024-1",200);score(p,"C",10,START.plusSeconds(1),"2025-1",200);
         score(p,"E4",3,START,"2024-1",200);score(p,"E2",5,START,"2024-1",200);score(p,"E3",7,START,"2024-1",200);
         long before=evidence.count();var v=status("GET",endpoint,studentToken,null,200);
@@ -332,6 +332,31 @@ class LocalMongoHttpIntegrationTest {
         int anonymous=response("GET",endpoint,null,null).statusCode();assertTrue(anonymous==401||anonymous==403);
     }
 
+    @Test @Order(10) void retiredAssignmentCannotInitializeRepairOrSwitchStoredIdentity() throws Exception {
+        var p=draft();
+        String endpoint="/api/v1/admin/students/"+student.getId()+"/curriculum-assignment";
+        var collection=mongo.getCollection("users");
+        Document before=collection.find(new Document("_id",student.getId())).projection(new Document("passwordHash",0)).first();
+        status("PUT",endpoint,adminToken,Map.of("curriculumId",p.getId().toHexString(),"chosenSpecializationCode","AA"),410);
+        assertEquals(before,collection.find(new Document("_id",student.getId())).projection(new Document("passwordHash",0)).first());
+        status("POST",path(p)+"/publish",adminToken,null,200);
+        // Initialize source data only in this isolated database, never via a production endpoint.
+        student.setCurriculumId(p.getId());student.setChosenSpecializationCode("AA");users.save(student);
+        before=collection.find(new Document("_id",student.getId())).projection(new Document("passwordHash",0)).first();
+        for (var body : List.of(Map.of("curriculumId",p.getId().toHexString(),"chosenSpecializationCode","AA"),
+                Map.of("curriculumId",new ObjectId().toHexString(),"chosenSpecializationCode","BB"),Map.of())) {
+            status("PUT",endpoint,adminToken,body,410);
+            assertEquals(before,collection.find(new Document("_id",student.getId())).projection(new Document("passwordHash",0)).first());
+        }
+        status("PUT",endpoint,studentToken,Map.of(),403);
+        status("GET","/api/v1/student/curriculum/evaluation-preview",studentToken,null,200);
+        student.setChosenSpecializationCode(null);users.save(student);
+        status("GET","/api/v1/student/curriculum",studentToken,null,400);
+        assertNull(users.findById(student.getId()).orElseThrow().getChosenSpecializationCode());
+        status("PUT",endpoint,adminToken,Map.of("curriculumId",p.getId().toHexString(),"chosenSpecializationCode","AA"),410);
+        assertNull(users.findById(student.getId()).orElseThrow().getChosenSpecializationCode());
+    }
+
     @Test @Order(99) void auditProvidedBigDataInAnIndependentLocalDatabase() throws Exception {
         String zip = System.getenv("PORTAL_TEST_BIGDATA_ZIP");
         Assumptions.assumeTrue(zip != null && Files.isRegularFile(Path.of(zip)), "No BigData ZIP supplied");
@@ -344,11 +369,16 @@ class LocalMongoHttpIntegrationTest {
         Map<String,Object> fixtures = new LinkedHashMap<>();
         for (String viewport : List.of("desktop", "mobile")) {
             Map<String,Object> scenarios = new LinkedHashMap<>();
-            for (String shape : List.of("workflow", "1-1", "1-N", "N-1")) {
+            for (String shape : List.of("workflow", "1-1", "1-N", "N-1", "graduation", "transcript", "transcript-empty")) {
                 fixture();
                 var p = draft();
-                if (!shape.equals("workflow")) {
-                    publishAndAssign(p);
+                student.setCurriculumId(p.getId()); student.setChosenSpecializationCode("AA"); users.save(student);
+                if(shape.startsWith("transcript")) {
+                    localTranscriptFixture(p,shape.endsWith("empty"));
+                } else if (shape.equals("graduation")) {
+                    localGraduationFixture(p);
+                } else if (!shape.equals("workflow")) {
+                    publishWithStoredIdentity(p);
                     rules.insert(ReplacementRule.builder().id(new ObjectId()).ruleFamilyId(new ObjectId()).versionNumber(1)
                         .majorId(major.getId()).applicableCohorts(List.of("K2024")).ruleType(shape)
                         .oldCourseCodes(shape.equals("N-1") ? List.of(c("C"), c("S")) : List.of(c("C")))
@@ -386,6 +416,67 @@ class LocalMongoHttpIntegrationTest {
             .specializations(List.of(new Curriculum.SpecializationItem("AA", "Track A"), new Curriculum.SpecializationItem("BB", "Track B")))
             .specializationTrees(Map.of("AA", tree("AA"), "BB", tree("BB"))).build());
     }
+    private void localTranscriptFixture(Curriculum p, boolean empty) {
+        int count=empty?5:8;
+        List<Curriculum.SemesterItem> semesters=new ArrayList<>();
+        for(int i=1;i<=count;i++) {
+            String code="PL"+i;
+            mongo.insert(Course.builder().courseCode(c(code)).courseName("Transcript course "+i).credits(3).status("ACTIVE").build());
+            var plannedCourses=new ArrayList<Curriculum.CurriculumCourseItem>();
+            plannedCourses.add(item(code,i>=3?"ELECTIVE":"MANDATORY"));
+            for(String extra:i==1?List.of("PX1","PX2","PX4","PX5"):i==2?List.of("PX3"):List.<String>of()) {
+                mongo.insert(Course.builder().courseCode(c(extra)).courseName("Ungraded course "+extra).credits(3).status("ACTIVE").build());
+                plannedCourses.add(item(extra,"ELECTIVE"));
+            }
+            semesters.add(new Curriculum.SemesterItem(i,plannedCourses));
+        }
+        var electives=new ArrayList<>(java.util.stream.IntStream.rangeClosed(3,count).mapToObj(i->c("PL"+i)).toList());
+        electives.addAll(List.of(c("PX1"),c("PX2"),c("PX3"),c("PX4"),c("PX5")));
+        var groups=List.of(group("COMMON","MANDATORY_COMMON",3,c("PL1")),group("SPEC","MANDATORY_SPECIALIZATION",3,c("PL2")),
+            group("FREE","ELECTIVE_FREE",3,electives.toArray(String[]::new)));
+        p.setSpecializationTrees(Map.of("AA",new Curriculum.SpecializationTree(semesters,groups),"BB",new Curriculum.SpecializationTree(semesters,groups)));
+        p.setStatus("ACTIVE");curricula.save(p);
+        if(!empty) {
+            var first=transcriptAttempt(3,"2024-1",1,"2024-06-01T00:00:00Z");
+            var retake=transcriptAttempt(8,"2026-2",2,"2026-06-01T00:00:00Z");
+            mongo.insert(AcademicRecord.builder().studentId(student.getId()).curriculumId(p.getId()).courseCode(c("PL8"))
+                .status("PASSED").highestScore10(8.0).attempts(List.of(first,retake)).build());
+            mongo.insert(AcademicRecord.builder().studentId(student.getId()).curriculumId(p.getId()).courseCode(c("PL1"))
+                .status("PASSED").highestScore10(7.0).attempts(List.of(transcriptAttempt(7,"2026-3",1,"2026-08-01T00:00:00Z"))).build());
+        }
+    }
+    private AcademicRecord.AttemptItem transcriptAttempt(double score,String term,int number,String completed) {
+        var a=new AcademicRecord.AttemptItem();a.setAttemptId(UUID.randomUUID().toString());a.setScore10(score);a.setSemesterCode(term);
+        a.setAttemptNumber(number);a.setCompletedAt(Date.from(Instant.parse(completed)));return a;
+    }
+    private void localGraduationFixture(Curriculum p) {
+        // An isolated, already-published source fixture, never a publication of user data.
+        for (String code : List.of("TH", "CP1", "CP2", "GEN", "OUT"))
+            mongo.insert(Course.builder().courseCode(c(code)).credits(code.startsWith("CP") ? 3 : 6)
+                .courseName(switch (code) {
+                    case "TH" -> "Khóa luận tốt nghiệp phần mềm";
+                    case "CP1" -> "Chuyên đề tốt nghiệp 1";
+                    case "CP2" -> "Đồ án tốt nghiệp 2";
+                    case "OUT" -> "Khóa luận ngoài cây";
+                    default -> "Học phần nghiên cứu";
+                }).status("ACTIVE").build());
+        for (var entry : p.getSpecializationTrees().entrySet()) {
+            var tree = entry.getValue();
+            var semesters = new ArrayList<>(tree.getSemesters());
+            semesters.add(new Curriculum.SemesterItem(8,List.of(item("TH","MANDATORY"),item("CP1","MANDATORY"),
+                item("CP2","MANDATORY"),item("GEN","MANDATORY"))));
+            tree.setSemesters(semesters);
+            var groups = new ArrayList<>(tree.getRequirementGroups());
+            groups.add(Curriculum.RequirementGroupItem.builder().groupCode("FINAL").groupName("Yêu cầu tốt nghiệp")
+                .kind("GRADUATION").requiredCredits(6).completionOptions(List.of(
+                    new Curriculum.CompletionOptionItem("THESIS",List.of(c("TH"))),
+                    new Curriculum.CompletionOptionItem("CAPSTONE",List.of(c("CP1"),c("CP2"))))).build());
+            groups.add(Curriculum.RequirementGroupItem.builder().groupCode("INFO").kind("CONDITIONAL")
+                .eligibleCourseCodes(List.of(c("GEN"),c("TH"),c("CP1"),c("CP2"))).countsTowardGraduation(false).build());
+            tree.setRequirementGroups(groups);
+        }
+        p.setStatus("ACTIVE"); curricula.save(p);
+    }
     private Curriculum.SpecializationTree tree(String track) {
         return new Curriculum.SpecializationTree(List.of(new Curriculum.SemesterItem(1, new ArrayList<>(List.of(item("C", "MANDATORY"), item(track.equals("AA") ? "S" : "SB", "MANDATORY")))),
             new Curriculum.SemesterItem(2, List.of(item("E2", "ELECTIVE"), item("E3", "ELECTIVE"), item("E4", "ELECTIVE")))), List.of(
@@ -398,14 +489,14 @@ class LocalMongoHttpIntegrationTest {
     }
     private String c(String code) { return prefix + code; }
     private String path(Curriculum p) { return "/api/curriculums/" + p.getId(); }
-    private void publishAndAssignFreshStudent(Curriculum p) throws Exception {
-        student.setId(new ObjectId()); student.setEmail(prefix + "fresh@example.test"); student.setCurriculumId(null); student.setChosenSpecializationCode(null); users.insert(student);
-        studentToken = login(student); publishAndAssign(p);
+    private void publishWithFreshStoredStudent(Curriculum p) throws Exception {
+        student.setId(new ObjectId()); student.setEmail(prefix + "fresh@example.test"); student.setCurriculumId(p.getId()); student.setChosenSpecializationCode("AA"); users.insert(student);
+        studentToken = login(student); publishWithStoredIdentity(p);
     }
-    private void publishAndAssign(Curriculum p) throws Exception {
+    private void publishWithStoredIdentity(Curriculum p) throws Exception {
         status("POST", path(p) + "/publish", adminToken, null, 200);
-        status("PUT", "/api/v1/admin/students/" + student.getId() + "/curriculum-assignment", adminToken,
-            Map.of("curriculumId", p.getId().toHexString(), "chosenSpecializationCode", "AA"), 200);
+        // Source-data initialization for the isolated fixture; no production assignment API.
+        student.setCurriculumId(p.getId()); student.setChosenSpecializationCode("AA"); users.save(student);
     }
     private Map<String,Object> score(Curriculum p, String code, double grade, Instant completed, String semester, int expected) throws Exception {
         return status("POST", "/api/v1/admin/academic-records/attempts", adminToken,

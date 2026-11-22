@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {editableTrack, copyTrack, confirmTreeSwitch, canPublishTree, programStatus, groupedTree,
-  courseRequirement, treeWarnings, assignTreeCourse, removeTreeCourse, assignmentCandidates, assignmentPayload,
+  courseRequirement, treeWarnings, assignTreeCourse, removeTreeCourse,
   electiveProgress, treeValidationMessage} from '../src/curriculum-ui.js';
 import {curriculumCourseStatus, curriculumCourseNeedsAttention} from '../src/curriculum-tracks.js';
-import {requestJson} from '../src/api-request.js';
 
 const group = (code, kind, courses) => ({groupCode: code, kind, eligibleCourseCodes: courses, requiredCredits: 3});
 const tree = (code, semester) => ({semesters: [{semesterNumber: semester,
@@ -100,32 +99,6 @@ test('failed electives compensated by others keep failure visible without a repe
   assert.equal(curriculumCourseStatus({...failed, status: 'NOT_STUDIED'}), 'Không bắt buộc hoàn thành thêm');
   assert.equal(failed.status, 'FAILED');
   assert.match(curriculumCourseStatus({status: 'FAILED'}), /Đang thiếu yêu cầu/);
-});
-
-test('student assignment filters by major and cohort and never offers another fixed version', () => {
-  const published = {...program, status: 'ACTIVE'};
-  assert.deepEqual(assignmentCandidates([program, published], student), [published]);
-  const fixed = {...student, curriculumId: program.id, chosenSpecializationCode: 'AA'};
-  assert.deepEqual(assignmentCandidates([published, {...published, id: 'new-version'}], fixed), [published]);
-  assert.deepEqual(assignmentPayload(student, published, 'AA'), {curriculumId: 'assigned', chosenSpecializationCode: 'AA'});
-  assert.throws(() => assignmentPayload(fixed, published, 'BB'), /cố định/);
-  assert.throws(() => assignmentPayload(student, {...published, majorId: 'wrong'}, 'AA'), /không phù hợp/);
-  assert.throws(() => assignmentPayload(student, {...published, cohort: 'K2025'}, 'AA'), /không phù hợp/);
-  assert.throws(() => assignmentPayload(null, null, ''), /Chọn sinh viên/);
-});
-
-test('assignment requests send the fixed scope and expose backend business errors', async () => {
-  const original = globalThis.fetch;
-  const payload = assignmentPayload(student, {...program, status: 'ACTIVE'}, 'AA');
-  try {
-    globalThis.fetch = async (url, options) => {
-      assert.match(url, /student\/curriculum-assignment$/);
-      assert.equal(options.method, 'PUT'); assert.equal(options.headers.Authorization, 'Bearer test-token');
-      assert.deepEqual(JSON.parse(options.body), payload);
-      return new Response(JSON.stringify({success: false, message: 'CTĐT không thuộc ngành và khóa tuyển sinh của sinh viên'}), {status: 400});
-    };
-    await assert.rejects(requestJson('/api/v1/admin/students/student/curriculum-assignment', {token: 'test-token', method: 'PUT', body: payload}), /ngành và khóa/);
-  } finally { globalThis.fetch = original; }
 });
 
 test('validation messages show the specialization name and readable requirement labels', () => {

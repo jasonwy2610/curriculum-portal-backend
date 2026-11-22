@@ -1,8 +1,9 @@
 import React, {useState} from 'react';
 import {selectCurriculumTrack} from './curriculum-tracks.js';
 import {groupedTree} from './curriculum-ui.js';
+import {GraduationGroups} from './GraduationOptions.jsx';
 
-export default function CurriculumTrackPreview({curriculum, summary, initialCode = ''}) {
+export default function CurriculumTrackPreview({curriculum, summary, catalog, initialCode = ''}) {
   const [code, setCode] = useState(initialCode);
   const chosen = curriculum.specializations?.some(s => s.code === code) ? code : curriculum.specializations?.[0]?.code ?? '';
   let view, error;
@@ -16,10 +17,11 @@ export default function CurriculumTrackPreview({curriculum, summary, initialCode
     {error && <p role="status">{error}</p>}
     {!chosen && <p>CTĐT chưa có chuyên ngành.</p>}
     {view && chosen && <>
+      <GraduationGroups tree={view} catalog={catalog}/>
       <p>Tổng tín chỉ yêu cầu đã kiểm tra: {official?.requiredTotal ?? 'Chưa kiểm tra'} · Bắt buộc: {official?.mandatoryCredits ?? 'Chưa kiểm tra'}</p>
       {!view.semesters?.length && <p>Chưa có học phần trong cây chuyên ngành.</p>}
-      {groupedTree(view).map(semester => <div className="catalog-semester" key={semester.semesterNumber}>
-        <h4>Học kỳ {semester.semesterNumber}</h4>{semester.sections.map(section => <section key={section.kind}>
+      {groupedTree(view).map(semester => <details className="catalog-semester cb-semester" key={semester.semesterNumber} open={semester.semesterNumber === 1}>
+        <summary><b>Học kỳ {semester.semesterNumber}</b><span>{semester.courses?.length ?? 0} học phần · {(semester.courses ?? []).reduce((sum,c)=>sum+(c.credits ?? 0),0)} tín chỉ</span></summary>{semester.sections.map(section => <section key={section.kind}>
           <h5>{section.label}</h5><div className="table-wrap"><table>
             <thead><tr><th>Học phần</th><th>Tín chỉ</th><th>Tiên quyết</th></tr></thead>
             <tbody>{section.courses.map((course, i) => <tr key={course.courseCode + '-' + i}>
@@ -28,7 +30,7 @@ export default function CurriculumTrackPreview({curriculum, summary, initialCode
             </tr>)}</tbody>
           </table></div>
         </section>)}
-      </div>)}
+      </details>)}
     </>}
   </section>;
 }

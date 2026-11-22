@@ -75,6 +75,12 @@ public class CurriculumRequirementValidationService {
                         errors.add("[" + track + "] Mã học phần lặp trong nhóm: " + group.getGroupCode());
                     for (var option : safe(group.getCompletionOptions())) {
                         if (option == null) errors.add("[" + track + "] Phương án tốt nghiệp rỗng");
+                        else {
+                            Set<String> seenCourses = new HashSet<>();
+                            for (String code : safe(option.getCourseCodes()))
+                                if (!seenCourses.add(code)) errors.add("[" + track + "] Phương án " + option.getOptionCode()
+                                    + " có mã học phần lặp: " + code);
+                        }
                     }
                 }
                 Curriculum selected = CurriculumTracks.select(curriculum, track);

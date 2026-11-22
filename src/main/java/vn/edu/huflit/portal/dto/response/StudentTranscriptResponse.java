@@ -5,7 +5,18 @@ import java.util.List;
 
 /** Academic activity credits are distinct from graduation-recognized credits. */
 public record StudentTranscriptResponse(Summary summary, List<Semester> semesters,
-        List<Attempt> attempts, List<Issue> issues) {
+        List<Attempt> attempts, List<Issue> issues, CurriculumPlan curriculumPlan) {
+    /** Calendar years require a confirmed schedule scoped to the assigned curriculum version and tree. */
+    public record CurriculumPlan(boolean available, String message, String curriculumId, Integer version,
+                                 String specializationCode, List<PlannedSemester> semesters) {}
+    /** Optional calendar code must come from an official schedule, never inferred from cohort or grades. */
+    public record PlannedSemester(String semesterKey, int plannedSemesterNumber, List<PlannedCourse> courses, String academicSemesterCode) {
+        public PlannedSemester(String semesterKey, int plannedSemesterNumber, List<PlannedCourse> courses) {
+            this(semesterKey, plannedSemesterNumber, courses, null);
+        }
+    }
+    public record PlannedCourse(String courseCode, String courseName, Integer credits, String state,
+                                List<String> actualSemesterCodes, List<String> replacementCourseCodes) {}
     public record Summary(Double cumulativeGpa4, Integer gpaCredits, Integer academicEarnedCredits,
                           Integer graduationRecognizedCredits, int failedCourseCount) {}
     public record Semester(String semesterCode, String academicYear, Integer term,

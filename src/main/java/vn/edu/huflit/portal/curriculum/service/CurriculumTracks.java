@@ -9,6 +9,7 @@ public final class CurriculumTracks {
     private CurriculumTracks() {}
 
     public static void validateStudentScope(Curriculum curriculum, User student) {
+        if (curriculum == null) throw new IllegalArgumentException("Không tìm thấy CTĐT đã liên kết; vui lòng kiểm tra dữ liệu nguồn của sinh viên");
         if (student == null || student.getMajorId() == null || student.getCohort() == null
             || student.getCohort().isBlank() || !Objects.equals(curriculum.getMajorId(), student.getMajorId())
             || !Objects.equals(curriculum.getCohort(), student.getCohort()))
@@ -18,12 +19,16 @@ public final class CurriculumTracks {
     /** The assigned version, identity and tree are resolved together for every student operation. */
     public static Curriculum forStudent(Curriculum curriculum, User student) {
         if (student == null || student.getCurriculumId() == null)
-            throw new IllegalArgumentException("Sinh viên chưa được gán CTĐT");
+            throw new IllegalArgumentException("Sinh viên chưa được gán CTĐT trong hồ sơ; vui lòng kiểm tra dữ liệu nguồn");
+        if (curriculum == null) throw new IllegalArgumentException("Không tìm thấy CTĐT đã liên kết; vui lòng kiểm tra dữ liệu nguồn của sinh viên");
         if (!student.getCurriculumId().equals(curriculum.getId()))
             throw new IllegalArgumentException("CTĐT không khớp phiên bản đã gán cố định cho sinh viên");
         validateStudentScope(curriculum, student);
         if ("DRAFT".equalsIgnoreCase(curriculum.getStatus()))
             throw new IllegalArgumentException("CTĐT được gán chưa được công bố");
+        if ((!safe(curriculum.getSpecializations()).isEmpty() || !trees(curriculum).isEmpty())
+            && (student.getChosenSpecializationCode() == null || student.getChosenSpecializationCode().isBlank()))
+            throw new IllegalArgumentException("Hồ sơ thiếu chuyên ngành cố định; vui lòng kiểm tra dữ liệu nguồn");
         return select(curriculum, student.getChosenSpecializationCode());
     }
 

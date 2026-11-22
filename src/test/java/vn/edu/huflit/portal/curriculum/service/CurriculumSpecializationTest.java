@@ -52,6 +52,37 @@ class CurriculumSpecializationTest {
         return program;
     }
 
+    private Curriculum graduationFixture(List<String> thesis, List<String> capstone) {
+        Curriculum program = fixture();
+        var tree = program.getSpecializationTrees().get("AA");
+        tree.getSemesters().add(new Curriculum.SemesterItem(8, List.of(item("G3"), item("G6"))));
+        var groups = new ArrayList<>(tree.getRequirementGroups());
+        groups.add(Curriculum.RequirementGroupItem.builder().groupCode("FINAL").kind("GRADUATION").requiredCredits(6)
+            .completionOptions(List.of(new Curriculum.CompletionOptionItem("THESIS", thesis),
+                new Curriculum.CompletionOptionItem("CAPSTONE", capstone))).build());
+        tree.setRequirementGroups(groups);
+        var catalogue = List.of(course("COMMON",3),course("A",3),course("B",6),course("E",3),course("G3",3),course("G6",6));
+        when(courses.findByCourseCodeIn(anyList())).thenAnswer(call -> {
+            List<String> codes = call.getArgument(0);
+            return catalogue.stream().filter(c -> codes.contains(c.getCourseCode())).toList();
+        });
+        return program;
+    }
+
+    @Test void duplicateWithinOneGraduationOptionIsRejectedEvenWhenAnotherOptionIsValid() {
+        var result = validator.validate(graduationFixture(List.of("G3", "G3"), List.of("G6")));
+        assertFalse(result.valid(), "A repeated 3-credit course must not appear to satisfy a 6-credit option");
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("THESIS") && e.contains("G3")), result.errors().toString());
+    }
+
+    @Test void sharingACourseBetweenAlternativeOptionsInOneGroupIsAllowed() {
+        var program = graduationFixture(List.of("G6"), List.of("G6"));
+        program.getSpecializationTrees().get("AA").getSemesters().getLast().setCourses(List.of(item("G6")));
+        var result = validator.validate(program);
+        assertTrue(result.valid(), result.errors().toString());
+        assertEquals(15, result.computedCreditsBySpecialization().get("AA"));
+    }
+
     private Course course(String code, int credits) {
         return Course.builder().courseCode(code).credits(credits).status("ACTIVE").build();
     }

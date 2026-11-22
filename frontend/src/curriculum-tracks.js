@@ -23,6 +23,11 @@ export function curriculumCourseNeedsAttention(course) {
 export function curriculumCourseStatus(course) {
   if (course.completedByReplacement) return 'Đạt qua thay thế';
   if (course.status === 'PASSED') return 'Đã đạt';
+  if (course.graduationAlternative && course.requiredForCompletion === false) {
+    if(course.graduationGroupComplete)return course.status === 'FAILED'
+      ? 'Không đạt · Đã hoàn thành phương án khác' : 'Không bắt buộc hoàn thành thêm';
+    return course.status === 'FAILED' ? 'Không đạt · Có thể chọn phương án tốt nghiệp khác' : 'Chưa học · Lựa chọn tốt nghiệp';
+  }
   if (course.electiveGroupComplete) return course.status === 'FAILED'
     ? 'Không đạt · Không bắt buộc hoàn thành thêm' : 'Không bắt buộc hoàn thành thêm';
   if (course.requiredForCompletion === false) return course.status === 'FAILED'

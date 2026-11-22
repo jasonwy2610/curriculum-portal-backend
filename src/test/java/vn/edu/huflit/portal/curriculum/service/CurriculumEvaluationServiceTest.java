@@ -568,6 +568,27 @@ class CurriculumEvaluationServiceTest {
         return curriculum;
     }
 
+    @Test void eitherGraduationOptionSatisfiesTheSameQuotaAndPassingBothDoesNotDoubleCredit() {
+        var c = setup(List.of("OLD"));
+        c.setRequirementGroups(List.of(c.getRequirementGroups().getFirst(),
+            Curriculum.RequirementGroupItem.builder().groupCode("FINAL").kind("GRADUATION").requiredCredits(3)
+                .completionOptions(List.of(new Curriculum.CompletionOptionItem("THESIS",List.of("NEW")),
+                    new Curriculum.CompletionOptionItem("CAPSTONE",List.of("ALT")))).build()));
+        var core = record("OLD",attempt("core",7,START));
+        for (String option : List.of("NEW","ALT")) {
+            attempts(core,record(option,attempt("option",8,START)));
+            var result=service.evaluateOfficial(student);
+            assertEquals(6,result.get("recognizedCredits"));assertEquals(true,result.get("officialGraduationEligible"));
+        }
+        attempts(core,record("NEW",attempt("thesis",8,START)),record("ALT",attempt("capstone",8,START)));
+        var both=service.evaluate(student);
+        assertEquals(6,both.get("recognizedCredits"));assertEquals(9,both.get("gpaCredits"));
+        c.getRequirementGroups().getLast().setCompletionOptions(List.of(new Curriculum.CompletionOptionItem("THESIS",List.of("NEW")),
+            new Curriculum.CompletionOptionItem("CAPSTONE",List.of("NEW"))));
+        attempts(core,record("NEW",attempt("shared",8,START)));
+        assertEquals(6,service.evaluate(student).get("recognizedCredits"));
+    }
+
     private Curriculum setup(List<String> originals, ReplacementRule... versions) {
         Curriculum curriculum = Curriculum.builder().id(student.getCurriculumId())
             .majorId(student.getMajorId()).cohort(student.getCohort())

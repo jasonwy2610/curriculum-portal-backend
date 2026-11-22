@@ -12,12 +12,14 @@ import org.springframework.data.domain.Sort;
 import org.bson.types.ObjectId;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import vn.edu.huflit.portal.curriculum.model.Curriculum;
 import vn.edu.huflit.portal.entity.ReplacementRule;
 import vn.edu.huflit.portal.replacement.service.impl.ReplacementRuleServiceImpl;
 
 /** At-least-once recovery of publication side effects; never republishes entities. */
 @Service
+@ConditionalOnProperty(name = "portal.publication-recovery.enabled", havingValue = "true", matchIfMissing = true)
 @EnableScheduling
 @RequiredArgsConstructor
 public class PublicationRecoveryService {
